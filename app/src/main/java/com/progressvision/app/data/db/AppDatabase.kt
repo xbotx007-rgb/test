@@ -11,19 +11,21 @@ import com.progressvision.app.data.entity.ActivityCategory
 import com.progressvision.app.data.entity.ActivityLog
 import com.progressvision.app.data.entity.BigTask
 import com.progressvision.app.data.entity.SportEntry
-import com.progressvision.app.data.entity.SportTracker
+import com.progressvision.app.data.entity.SportExercise
+import com.progressvision.app.data.entity.SportWorkout
 import com.progressvision.app.data.entity.SubTask
 
 @Database(
     entities = [
-        SportTracker::class,
+        SportWorkout::class,
+        SportExercise::class,
         SportEntry::class,
         BigTask::class,
         SubTask::class,
         ActivityCategory::class,
         ActivityLog::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

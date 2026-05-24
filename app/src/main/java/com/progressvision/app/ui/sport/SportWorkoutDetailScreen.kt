@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,34 +46,53 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.progressvision.app.ProgressVisionApp
 import com.progressvision.app.R
+import com.progressvision.app.data.entity.SportExercise
+import com.progressvision.app.data.entity.SportType
 import com.progressvision.app.data.entity.SportWorkout
 import com.progressvision.app.ui.common.EmptyState
-import com.progressvision.app.util.Time
 import com.progressvision.app.viewmodel.AppViewModelFactory
 import com.progressvision.app.viewmodel.SportViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SportListScreen(onOpen: (Long) -> Unit) {
+fun SportWorkoutDetailScreen(
+    workoutId: Long,
+    onBack: () -> Unit,
+    onOpenExercise: (Long) -> Unit
+) {
     val ctx = LocalContext.current
     val app = ctx.applicationContext as ProgressVisionApp
     val vm: SportViewModel = viewModel(factory = AppViewModelFactory(app))
-    val workouts by vm.workouts.collectAsState()
 
-    var showCreate by remember { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<SportWorkout?>(null) }
+    var workout by remember { mutableStateOf<SportWorkout?>(null) }
+    LaunchedEffect(workoutId) { workout = vm.getWorkout(workoutId) }
+    val current = workout ?: return
+
+    val exercises by vm.exercises(workoutId).collectAsState(initial = emptyList())
+
+    var showAdd by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<SportExercise?>(null) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_sport)) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(current.name) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    }
+                }
+            )
+        },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreate = true }) {
-                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sport_create_workout))
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sport_create_exercise))
             }
         }
     ) { padding ->
-        if (workouts.isEmpty()) {
+        if (exercises.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState(stringResource(R.string.sport_no_workouts))
+                EmptyState(stringResource(R.string.sport_no_exercises))
             }
         } else {
             LazyColumn(
@@ -78,34 +100,34 @@ fun SportListScreen(onOpen: (Long) -> Unit) {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(workouts, key = { it.id }) { workout ->
-                    WorkoutCard(
-                        workout = workout,
-                        onClick = { onOpen(workout.id) },
-                        onDelete = { pendingDelete = workout }
+                items(exercises, key = { it.id }) { ex ->
+                    ExerciseCard(
+                        exercise = ex,
+                        onClick = { onOpenExercise(ex.id) },
+                        onDelete = { pendingDelete = ex }
                     )
                 }
             }
         }
     }
 
-    if (showCreate) {
-        CreateWorkoutDialog(
-            onDismiss = { showCreate = false },
-            onCreate = { name ->
-                vm.createWorkout(name)
-                showCreate = false
+    if (showAdd) {
+        CreateExerciseDialog(
+            onDismiss = { showAdd = false },
+            onCreate = { name, type ->
+                vm.createExercise(workoutId, name, type)
+                showAdd = false
             }
         )
     }
-    pendingDelete?.let { w ->
+    pendingDelete?.let { ex ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text(w.name) },
-            text = { Text("Удалить тренировку вместе со всеми упражнениями?") },
+            title = { Text(ex.name) },
+            text = { Text("Удалить упражнение вместе со всеми подходами?") },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.deleteWorkout(w); pendingDelete = null
+                    vm.deleteExercise(ex); pendingDelete = null
                 }) { Text(stringResource(R.string.action_delete)) }
             },
             dismissButton = {
@@ -116,7 +138,7 @@ fun SportListScreen(onOpen: (Long) -> Unit) {
 }
 
 @Composable
-private fun WorkoutCard(workout: SportWorkout, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun ExerciseCard(exercise: SportExercise, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -127,9 +149,13 @@ private fun WorkoutCard(workout: SportWorkout, onClick: () -> Unit, onDelete: ()
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Text(workout.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    text = Time.formatDate(workout.createdAt),
+                    text = when (exercise.type) {
+                        SportType.STRENGTH -> stringResource(R.string.sport_type_strength)
+                        SportType.BODYWEIGHT -> stringResource(R.string.sport_type_bodyweight)
+                        SportType.CARDIO -> stringResource(R.string.sport_type_cardio)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -142,25 +168,43 @@ private fun WorkoutCard(workout: SportWorkout, onClick: () -> Unit, onDelete: ()
 }
 
 @Composable
-private fun CreateWorkoutDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+private fun CreateExerciseDialog(onDismiss: () -> Unit, onCreate: (String, SportType) -> Unit) {
     var name by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(SportType.STRENGTH) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.sport_create_workout)) },
+        title = { Text(stringResource(R.string.sport_create_exercise)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.sport_workout_name)) },
+                    label = { Text(stringResource(R.string.sport_exercise_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = type == SportType.STRENGTH,
+                        onClick = { type = SportType.STRENGTH },
+                        label = { Text(stringResource(R.string.sport_type_strength)) }
+                    )
+                    FilterChip(
+                        selected = type == SportType.BODYWEIGHT,
+                        onClick = { type = SportType.BODYWEIGHT },
+                        label = { Text(stringResource(R.string.sport_type_bodyweight)) }
+                    )
+                    FilterChip(
+                        selected = type == SportType.CARDIO,
+                        onClick = { type = SportType.CARDIO },
+                        label = { Text(stringResource(R.string.sport_type_cardio)) }
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank()) {
+            TextButton(onClick = { onCreate(name, type) }, enabled = name.isNotBlank()) {
                 Text(stringResource(R.string.action_save))
             }
         },

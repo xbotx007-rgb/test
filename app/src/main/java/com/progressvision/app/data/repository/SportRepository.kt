@@ -5,7 +5,8 @@ import com.progressvision.app.data.db.SportDao
 import com.progressvision.app.data.entity.ActivityCategory
 import com.progressvision.app.data.entity.ActivityLog
 import com.progressvision.app.data.entity.SportEntry
-import com.progressvision.app.data.entity.SportTracker
+import com.progressvision.app.data.entity.SportExercise
+import com.progressvision.app.data.entity.SportWorkout
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -13,16 +14,21 @@ class SportRepository(
     private val sportDao: SportDao,
     private val dayDao: DayDao
 ) {
-    fun trackers(): Flow<List<SportTracker>> = sportDao.observeTrackers()
-    fun entries(trackerId: Long): Flow<List<SportEntry>> = sportDao.observeEntries(trackerId)
-    fun entriesSince(trackerId: Long, since: Long): Flow<List<SportEntry>> =
-        sportDao.observeEntriesSince(trackerId, since)
+    fun workouts(): Flow<List<SportWorkout>> = sportDao.observeWorkouts()
+    suspend fun getWorkout(id: Long) = sportDao.getWorkout(id)
+    suspend fun upsertWorkout(workout: SportWorkout): Long = sportDao.insertWorkout(workout)
+    suspend fun deleteWorkout(workout: SportWorkout) = sportDao.deleteWorkout(workout)
 
-    suspend fun getTracker(id: Long) = sportDao.getTracker(id)
-    suspend fun upsertTracker(tracker: SportTracker): Long = sportDao.insertTracker(tracker)
-    suspend fun deleteTracker(tracker: SportTracker) = sportDao.deleteTracker(tracker)
+    fun exercises(workoutId: Long): Flow<List<SportExercise>> = sportDao.observeExercises(workoutId)
+    suspend fun getExercise(id: Long) = sportDao.getExercise(id)
+    suspend fun upsertExercise(exercise: SportExercise): Long = sportDao.insertExercise(exercise)
+    suspend fun deleteExercise(exercise: SportExercise) = sportDao.deleteExercise(exercise)
 
-    suspend fun addEntry(entry: SportEntry, trackerName: String): Long {
+    fun entries(exerciseId: Long): Flow<List<SportEntry>> = sportDao.observeEntries(exerciseId)
+    fun entriesSince(exerciseId: Long, since: Long): Flow<List<SportEntry>> =
+        sportDao.observeEntriesSince(exerciseId, since)
+
+    suspend fun addEntry(entry: SportEntry, label: String): Long {
         val id = sportDao.insertEntry(entry)
         val durationSec = entry.durationSec ?: estimateDuration(entry)
         if (durationSec > 0) {
@@ -31,7 +37,7 @@ class SportRepository(
             dayDao.insertLog(
                 ActivityLog(
                     categoryId = sportCat,
-                    title = trackerName,
+                    title = label,
                     startedAt = started,
                     endedAt = entry.date,
                     note = entry.note,
