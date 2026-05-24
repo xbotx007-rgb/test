@@ -1,7 +1,6 @@
 package com.progressvision.app.ui.sport
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,7 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.progressvision.app.ProgressVisionApp
 import com.progressvision.app.R
 import com.progressvision.app.data.entity.SportEntry
-import com.progressvision.app.data.entity.SportTracker
+import com.progressvision.app.data.entity.SportExercise
 import com.progressvision.app.data.entity.SportType
 import com.progressvision.app.ui.common.LineChart
 import com.progressvision.app.ui.common.SectionCard
@@ -71,21 +70,21 @@ private val RangePresets: List<Range> = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun SportDetailScreen(trackerId: Long, onBack: () -> Unit) {
+fun SportDetailScreen(exerciseId: Long, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val app = ctx.applicationContext as ProgressVisionApp
     val vm: SportViewModel = viewModel(factory = AppViewModelFactory(app))
 
-    var tracker by remember { mutableStateOf<SportTracker?>(null) }
-    LaunchedEffect(trackerId) { tracker = vm.getTracker(trackerId) }
-    val current = tracker ?: return
+    var exercise by remember { mutableStateOf<SportExercise?>(null) }
+    LaunchedEffect(exerciseId) { exercise = vm.getExercise(exerciseId) }
+    val current = exercise ?: return
 
     var range by remember { mutableStateOf<Range>(Range.D30) }
     var customDays by remember { mutableStateOf(60) }
     var showCustomPeriod by remember { mutableStateOf(false) }
     val since = remember(range) { Time.daysAgo(range.days) }
-    val rangeEntries by vm.entriesSince(trackerId, since).collectAsState(initial = emptyList())
-    val allEntries by vm.entries(trackerId).collectAsState(initial = emptyList())
+    val rangeEntries by vm.entriesSince(exerciseId, since).collectAsState(initial = emptyList())
+    val allEntries by vm.entries(exerciseId).collectAsState(initial = emptyList())
 
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<SportEntry?>(null) }
@@ -167,7 +166,7 @@ fun SportDetailScreen(trackerId: Long, onBack: () -> Unit) {
             if (allEntries.isEmpty()) {
                 item {
                     Text(
-                        "Запишите первую тренировку, чтобы увидеть прогресс.",
+                        "Запишите первый подход, чтобы увидеть прогресс.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -190,7 +189,7 @@ fun SportDetailScreen(trackerId: Long, onBack: () -> Unit) {
             onDismiss = { showAdd = false },
             onSave = { entries ->
                 entries.forEach { e ->
-                    vm.addEntry(e.copy(trackerId = trackerId), current.name)
+                    vm.addEntry(e.copy(exerciseId = exerciseId), current.name)
                 }
                 showAdd = false
             }
@@ -236,7 +235,7 @@ private fun SummaryRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        StatTile(label = "Тренировок", value = count.toString(), modifier = Modifier.weight(1f))
+        StatTile(label = "Подходов", value = count.toString(), modifier = Modifier.weight(1f))
         StatTile(label = "Среднее", value = formatNumber(avg), modifier = Modifier.weight(1f))
         StatTile(label = "Рекорд", value = formatNumber(best), modifier = Modifier.weight(1f))
     }
@@ -366,7 +365,6 @@ private fun AddEntryDialog(
                         Spacer(Modifier.height(4.dp))
                         TextButton(onClick = {
                             val last = rows.lastOrNull() ?: SetRow()
-                            // Convenience: pre-fill new row with previous reps/weight
                             rows = rows + SetRow(reps = last.reps, weight = last.weight)
                         }) {
                             Icon(Icons.Filled.Add, contentDescription = null)
@@ -411,8 +409,7 @@ private fun AddEntryDialog(
                             val reps = row.reps.toIntOrNull() ?: return@mapIndexedNotNull null
                             if (reps <= 0) return@mapIndexedNotNull null
                             SportEntry(
-                                trackerId = 0,
-                                // offset by ms per row so ordering by date is stable
+                                exerciseId = 0,
                                 date = baseDate + index,
                                 sets = 1,
                                 reps = reps,
@@ -429,7 +426,7 @@ private fun AddEntryDialog(
                         if (d == null && durSec == null) emptyList()
                         else listOf(
                             SportEntry(
-                                trackerId = 0,
+                                exerciseId = 0,
                                 date = baseDate,
                                 distanceKm = d,
                                 durationSec = durSec,

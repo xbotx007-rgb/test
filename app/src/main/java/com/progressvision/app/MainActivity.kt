@@ -31,6 +31,7 @@ import com.progressvision.app.ui.day.DayScreen
 import com.progressvision.app.ui.navigation.Routes
 import com.progressvision.app.ui.sport.SportDetailScreen
 import com.progressvision.app.ui.sport.SportListScreen
+import com.progressvision.app.ui.sport.SportWorkoutDetailScreen
 import com.progressvision.app.ui.task.TaskDetailScreen
 import com.progressvision.app.ui.task.TaskListScreen
 import com.progressvision.app.ui.theme.ProgressVisionTheme
@@ -101,15 +102,26 @@ private fun AppNavHost(nav: NavHostController, padding: PaddingValues) {
     ) {
         composable(Routes.SPORT_LIST) {
             SportListScreen(
-                onOpen = { id -> nav.navigate(Routes.sportDetail(id)) }
+                onOpen = { id -> nav.navigate(Routes.sportWorkoutDetail(id)) }
             )
         }
         composable(
-            Routes.SPORT_DETAIL,
-            arguments = listOf(navArgument("trackerId") { type = NavType.LongType })
+            Routes.SPORT_WORKOUT_DETAIL,
+            arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
         ) { entry ->
-            val id = entry.arguments?.getLong("trackerId") ?: 0L
-            SportDetailScreen(trackerId = id, onBack = { nav.popBackStack() })
+            val id = entry.arguments?.getLong("workoutId") ?: 0L
+            SportWorkoutDetailScreen(
+                workoutId = id,
+                onBack = { nav.popBackStack() },
+                onOpenExercise = { exId -> nav.navigate(Routes.sportExerciseDetail(exId)) }
+            )
+        }
+        composable(
+            Routes.SPORT_EXERCISE_DETAIL,
+            arguments = listOf(navArgument("exerciseId") { type = NavType.LongType })
+        ) { entry ->
+            val id = entry.arguments?.getLong("exerciseId") ?: 0L
+            SportDetailScreen(exerciseId = id, onBack = { nav.popBackStack() })
         }
         composable(Routes.TASK_LIST) {
             TaskListScreen(onOpen = { id -> nav.navigate(Routes.taskDetail(id)) })

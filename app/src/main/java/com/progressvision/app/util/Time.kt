@@ -45,13 +45,16 @@ object Time {
     fun daysAgo(days: Int): Long = startOfDay() - days * 24L * 3_600_000L
 
     fun formatDuration(sec: Long): String {
-        if (sec <= 0) return "0 мин"
+        if (sec <= 0) return "0 сек"
         val h = sec / 3600
         val m = (sec % 3600) / 60
+        val s = sec % 60
         return when {
             h > 0 && m > 0 -> "${h} ч ${m} мин"
             h > 0 -> "${h} ч"
-            else -> "${m} мин"
+            m > 0 && s > 0 -> "${m} мин ${s} сек"
+            m > 0 -> "${m} мин"
+            else -> "${s} сек"
         }
     }
 

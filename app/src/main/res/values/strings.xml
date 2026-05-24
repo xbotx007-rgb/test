@@ -17,13 +17,17 @@
     <string name="action_resume">Продолжить</string>
     <string name="action_stop">Стоп</string>
 
-    <string name="sport_create_tracker">Новый трекер</string>
-    <string name="sport_tracker_name">Название (например, Подтягивания)</string>
+    <string name="sport_create_workout">Новая тренировка</string>
+    <string name="sport_workout_name">Название тренировки (например, День ног)</string>
+    <string name="sport_create_exercise">Новое упражнение</string>
+    <string name="sport_exercise_name">Название упражнения (например, Подтягивания)</string>
     <string name="sport_type_strength">Силовое</string>
     <string name="sport_type_bodyweight">С собственным весом</string>
     <string name="sport_type_cardio">Кардио</string>
-    <string name="sport_no_trackers">Создайте свой первый трекер, чтобы начать отслеживать прогресс.</string>
-    <string name="sport_add_entry">Записать тренировку</string>
+    <string name="sport_no_workouts">Создайте свою первую тренировку, чтобы начать отслеживать прогресс.</string>
+    <string name="sport_no_exercises">Добавьте первое упражнение в эту тренировку.</string>
+    <string name="sport_add_entry">Записать подходы</string>
+    <string name="sport_exercises">Упражнения</string>
     <string name="sport_reps">Повторений</string>
     <string name="sport_sets">Подходов</string>
     <string name="sport_weight">Вес, кг</string>
