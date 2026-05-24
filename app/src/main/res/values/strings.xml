@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ProgressVision</string>
+
+    <string name="tab_sport">Спорт</string>
+    <string name="tab_task">Задача</string>
+    <string name="tab_day">День</string>
+    <string name="tab_settings">Настройки</string>
+
+    <string name="action_add">Добавить</string>
+    <string name="action_save">Сохранить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_back">Назад</string>
+    <string name="action_start">Старт</string>
+    <string name="action_pause">Пауза</string>
+    <string name="action_resume">Продолжить</string>
+    <string name="action_stop">Стоп</string>
+
+    <string name="sport_create_tracker">Новый трекер</string>
+    <string name="sport_tracker_name">Название (например, Подтягивания)</string>
+    <string name="sport_type_strength">Силовое</string>
+    <string name="sport_type_bodyweight">С собственным весом</string>
+    <string name="sport_type_cardio">Кардио</string>
+    <string name="sport_no_trackers">Создайте свой первый трекер, чтобы начать отслеживать прогресс.</string>
+    <string name="sport_add_entry">Записать тренировку</string>
+    <string name="sport_reps">Повторений</string>
+    <string name="sport_sets">Подходов</string>
+    <string name="sport_weight">Вес, кг</string>
+    <string name="sport_distance">Дистанция, км</string>
+    <string name="sport_duration_min">Длительность, мин</string>
+    <string name="sport_notes">Заметка</string>
+    <string name="sport_history">История</string>
+    <string name="sport_progress_7d">7 дней</string>
+    <string name="sport_progress_30d">30 дней</string>
+    <string name="sport_progress_90d">3 месяца</string>
+    <string name="sport_progress_all">Всё время</string>
+
+    <string name="task_create">Новая задача</string>
+    <string name="task_title">Название цели</string>
+    <string name="task_description">Описание (необязательно)</string>
+    <string name="task_no_tasks">Создайте большую цель и разбейте её на маленькие шаги.</string>
+    <string name="task_add_subtask">Добавить подзадачу</string>
+    <string name="task_subtask_title">Название подзадачи</string>
+    <string name="task_progress_done">Выполнено</string>
+    <string name="task_progress_percent">%1$d%%</string>
+    <string name="task_timer">Таймер</string>
+    <string name="task_total_time">Всего времени</string>
+
+    <string name="day_no_logs">Сегодня пока нет записей. Запустите таймер или добавьте активность.</string>
+    <string name="day_today">Сегодня</string>
+    <string name="day_week">Неделя</string>
+    <string name="day_quick_add">Быстрое добавление</string>
+    <string name="day_create_category">Новая категория</string>
+    <string name="day_category_name">Название категории</string>
+    <string name="day_running">Сейчас идёт</string>
+    <string name="day_total_hours">Всего часов</string>
+    <string name="day_balance">Баланс дня</string>
+    <string name="day_add_manual">Добавить вручную</string>
+
+    <string name="empty_value">—</string>
+</resources>
