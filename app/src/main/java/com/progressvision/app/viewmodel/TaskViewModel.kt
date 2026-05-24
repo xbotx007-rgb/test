@@ -17,10 +17,22 @@ class TaskViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
     val bigTasks: StateFlow<List<BigTask>> = repo.bigTasks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun createBigTask(title: String, description: String?) {
+    fun createBigTask(
+        title: String,
+        description: String?,
+        deadlineFrom: Long? = null,
+        deadlineTo: Long? = null
+    ) {
         if (title.isBlank()) return
         viewModelScope.launch {
-            repo.upsertBigTask(BigTask(title = title.trim(), description = description?.trim()?.ifBlank { null }))
+            repo.upsertBigTask(
+                BigTask(
+                    title = title.trim(),
+                    description = description?.trim()?.ifBlank { null },
+                    deadlineFrom = deadlineFrom,
+                    deadlineTo = deadlineTo
+                )
+            )
         }
     }
 

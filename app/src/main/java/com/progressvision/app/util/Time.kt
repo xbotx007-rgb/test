@@ -10,10 +10,25 @@ object Time {
     private val dateFmt = SimpleDateFormat("dd.MM.yyyy", Locale("ru"))
     private val timeFmt = SimpleDateFormat("HH:mm", Locale("ru"))
     private val dayLabelFmt = SimpleDateFormat("dd MMM", Locale("ru"))
+    private val dateTimeFmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("ru"))
 
     fun formatDate(ms: Long): String = dateFmt.format(Date(ms))
     fun formatTime(ms: Long): String = timeFmt.format(Date(ms))
     fun formatDayLabel(ms: Long): String = dayLabelFmt.format(Date(ms))
+    fun formatDateTime(ms: Long): String = dateTimeFmt.format(Date(ms))
+
+    fun parseDateTime(value: String): Long? {
+        val trimmed = value.trim().ifBlank { return null }
+        return try {
+            dateTimeFmt.parse(trimmed)?.time
+        } catch (_: Exception) {
+            try {
+                dateFmt.parse(trimmed)?.time
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 
     fun startOfDay(ms: Long = System.currentTimeMillis()): Long {
         val cal = Calendar.getInstance().apply {
@@ -70,5 +85,6 @@ object Time {
         dateFmt.timeZone = TimeZone.getDefault()
         timeFmt.timeZone = TimeZone.getDefault()
         dayLabelFmt.timeZone = TimeZone.getDefault()
+        dateTimeFmt.timeZone = TimeZone.getDefault()
     }
 }

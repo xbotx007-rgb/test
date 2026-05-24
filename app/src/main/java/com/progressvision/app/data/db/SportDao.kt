@@ -49,6 +49,16 @@ interface SportDao {
     @Query("SELECT * FROM sport_entry WHERE exerciseId = :exerciseId AND date >= :since ORDER BY date ASC")
     fun observeEntriesSince(exerciseId: Long, since: Long): Flow<List<SportEntry>>
 
+    @Query("SELECT * FROM sport_entry ORDER BY date DESC")
+    fun observeAllEntries(): Flow<List<SportEntry>>
+
+    @Query(
+        "SELECT e.* FROM sport_entry e " +
+            "INNER JOIN sport_exercise ex ON ex.id = e.exerciseId " +
+            "WHERE ex.workoutId = :workoutId ORDER BY e.date DESC"
+    )
+    fun observeEntriesForWorkout(workoutId: Long): Flow<List<SportEntry>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertEntry(entry: SportEntry): Long
 

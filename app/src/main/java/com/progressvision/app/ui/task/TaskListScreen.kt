@@ -48,6 +48,7 @@ import com.progressvision.app.data.entity.BigTask
 import com.progressvision.app.data.repository.progressPercent
 import com.progressvision.app.ui.common.EmptyState
 import com.progressvision.app.ui.common.ProgressRing
+import com.progressvision.app.util.Time
 import com.progressvision.app.viewmodel.AppViewModelFactory
 import com.progressvision.app.viewmodel.TaskViewModel
 
@@ -95,8 +96,8 @@ fun TaskListScreen(onOpen: (Long) -> Unit) {
     if (showCreate) {
         CreateTaskDialog(
             onDismiss = { showCreate = false },
-            onCreate = { title, desc ->
-                vm.createBigTask(title, desc)
+            onCreate = { title, desc, from, to ->
+                vm.createBigTask(title, desc, from, to)
                 showCreate = false
             }
         )
@@ -148,6 +149,27 @@ private fun BigTaskCard(task: BigTask, vm: TaskViewModel, onOpen: () -> Unit, on
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                val meta = buildList {
+                    add("${stringResource(R.string.task_created_at)}: ${Time.formatDateTime(task.createdAt)}")
+                    val from = task.deadlineFrom
+                    val to = task.deadlineTo
+                    if (from != null || to != null) {
+                        val left = from?.let { Time.formatDateTime(it) } ?: "—"
+                        val right = to?.let { Time.formatDateTime(it) } ?: "—"
+                        add("${stringResource(R.string.task_deadline)}: $left → $right")
+                    }
+                    task.completedAt?.let {
+                        add("${stringResource(R.string.task_completed_at)}: ${Time.formatDateTime(it)}")
+                    }
+                }
+                if (meta.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        meta.joinToString("\n"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             IconButton(onClick = onDelete) {
                 Icon(
@@ -161,9 +183,15 @@ private fun BigTaskCard(task: BigTask, vm: TaskViewModel, onOpen: () -> Unit, on
 }
 
 @Composable
-private fun CreateTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
+private fun CreateTaskDialog(
+    onDismiss: () -> Unit,
+    onCreate: (title: String, description: String, deadlineFrom: Long?, deadlineTo: Long?) -> Unit
+) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var fromInput by remember { mutableStateOf("") }
+    var toInput by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.task_create)) },
@@ -183,12 +211,45 @@ private fun CreateTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -
                     label = { Text(stringResource(R.string.task_description)) },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.task_deadline), style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = fromInput,
+                    onValueChange = { fromInput = it; error = null },
+                    label = { Text(stringResource(R.string.task_deadline_from)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = toInput,
+                    onValueChange = { toInput = it; error = null },
+                    label = { Text(stringResource(R.string.task_deadline_to)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                error?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onCreate(title, description) }, enabled = title.isNotBlank()) {
-                Text(stringResource(R.string.action_save))
-            }
+            TextButton(
+                onClick = {
+                    val from = if (fromInput.isBlank()) null else Time.parseDateTime(fromInput)
+                    val to = if (toInput.isBlank()) null else Time.parseDateTime(toInput)
+                    if (fromInput.isNotBlank() && from == null) {
+                        error = "Не удалось разобрать дату начала"; return@TextButton
+                    }
+                    if (toInput.isNotBlank() && to == null) {
+                        error = "Не удалось разобрать дату окончания"; return@TextButton
+                    }
+                    onCreate(title, description, from, to)
+                },
+                enabled = title.isNotBlank()
+            ) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }

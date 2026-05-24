@@ -55,6 +55,11 @@
     <string name="task_progress_percent">%1$d%%</string>
     <string name="task_timer">Таймер</string>
     <string name="task_total_time">Всего времени</string>
+    <string name="task_deadline">Срок выполнения</string>
+    <string name="task_deadline_from">Начало (ДД.ММ.ГГГГ ЧЧ:ММ)</string>
+    <string name="task_deadline_to">Окончание (ДД.ММ.ГГГГ ЧЧ:ММ)</string>
+    <string name="task_created_at">Создано</string>
+    <string name="task_completed_at">Завершено</string>
 
     <string name="day_no_logs">Сегодня пока нет записей. Запустите таймер или добавьте активность.</string>
     <string name="day_today">Сегодня</string>
@@ -71,6 +76,29 @@
     <string name="day_total_hours">Всего часов</string>
     <string name="day_balance">Баланс дня</string>
     <string name="day_add_manual">Добавить вручную</string>
+    <string name="day_save_day">Сохранить день</string>
+    <string name="day_saved_days">Сохранённые дни</string>
+    <string name="day_saved_label">Название</string>
+    <string name="day_saved_note">Заметка (необязательно)</string>
+    <string name="day_saved_select_all">Выбрать все</string>
+    <string name="day_saved_clear">Снять</string>
+    <string name="day_saved_combined_stats">Статистика по выбранным</string>
+    <string name="day_saved_no_items">Сохраните день, чтобы вернуться к нему позже.</string>
+    <string name="day_edit_label">Изменить</string>
+
+    <string name="sport_workout_type_regular">Обычная</string>
+    <string name="sport_workout_type_measurement">Замерная</string>
+    <string name="sport_pro_mode">Pro режим</string>
+    <string name="sport_pro_start_set">Начать подход</string>
+    <string name="sport_pro_end_set">Закончить подход</string>
+    <string name="sport_pro_rest">Отдых</string>
+    <string name="sport_pro_pulse_before">Пульс до (за 15 сек)</string>
+    <string name="sport_pro_pulse_after">Пульс после (за 15 сек)</string>
+    <string name="sport_analytics_all">Аналитика всех тренировок</string>
+    <string name="sport_analytics_measurement">Сравнение с замерными</string>
+    <string name="sport_record">Рекорд</string>
+    <string name="sport_tonnage">Тоннаж</string>
+    <string name="sport_sets_total">Подходов</string>
 
     <string name="empty_value">—</string>
 </resources>

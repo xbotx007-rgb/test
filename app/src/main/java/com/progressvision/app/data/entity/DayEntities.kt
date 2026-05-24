@@ -48,3 +48,14 @@ data class ActivityLog(
     val isRunning: Boolean get() = endedAt == null
     val isPaused: Boolean get() = endedAt == null && pausedAt != null
 }
+
+/** A saved range of days the user wants to review (e.g. "Прошлая неделя"). */
+@Entity(tableName = "saved_day")
+data class SavedDay(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val label: String,
+    val fromMs: Long,
+    val toMs: Long,
+    val note: String? = null,
+    val savedAt: Long = System.currentTimeMillis()
+)

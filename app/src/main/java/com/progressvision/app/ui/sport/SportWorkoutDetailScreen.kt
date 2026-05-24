@@ -46,10 +46,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.progressvision.app.ProgressVisionApp
 import com.progressvision.app.R
+import com.progressvision.app.data.entity.SportEntry
 import com.progressvision.app.data.entity.SportExercise
 import com.progressvision.app.data.entity.SportType
 import com.progressvision.app.data.entity.SportWorkout
+import com.progressvision.app.data.entity.SportWorkoutType
 import com.progressvision.app.ui.common.EmptyState
+import com.progressvision.app.ui.common.SectionCard
+import com.progressvision.app.ui.common.StatTile
 import com.progressvision.app.viewmodel.AppViewModelFactory
 import com.progressvision.app.viewmodel.SportViewModel
 
@@ -69,6 +73,7 @@ fun SportWorkoutDetailScreen(
     val current = workout ?: return
 
     val exercises by vm.exercises(workoutId).collectAsState(initial = emptyList())
+    val entries by vm.entriesForWorkout(workoutId).collectAsState(initial = emptyList())
 
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<SportExercise?>(null) }
@@ -90,16 +95,28 @@ fun SportWorkoutDetailScreen(
             }
         }
     ) { padding ->
-        if (exercises.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState(stringResource(R.string.sport_no_exercises))
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                WorkoutAnalyticsCard(workout = current, exercises = exercises, entries = entries)
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            item {
+                Text(
+                    stringResource(R.string.sport_exercises),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            if (exercises.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxSize()) {
+                        EmptyState(stringResource(R.string.sport_no_exercises))
+                    }
+                }
+            } else {
                 items(exercises, key = { it.id }) { ex ->
                     ExerciseCard(
                         exercise = ex,
@@ -134,6 +151,43 @@ fun SportWorkoutDetailScreen(
                 TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
+    }
+}
+
+@Composable
+private fun WorkoutAnalyticsCard(
+    workout: SportWorkout,
+    exercises: List<SportExercise>,
+    entries: List<SportEntry>
+) {
+    val totalSets = entries.sumOf { it.sets ?: 0 }
+    val tonnage = entries.sumOf { ((it.sets ?: 0) * (it.reps ?: 0) * (it.weightKg ?: 0f)).toDouble() }
+    val maxWeight = entries.mapNotNull { it.weightKg }.maxOrNull() ?: 0f
+    val maxReps = entries.mapNotNull { it.reps }.maxOrNull() ?: 0
+    val typeLabel = when (workout.type) {
+        SportWorkoutType.REGULAR -> stringResource(R.string.sport_workout_type_regular)
+        SportWorkoutType.MEASUREMENT -> stringResource(R.string.sport_workout_type_measurement)
+    }
+    SectionCard(title = "$typeLabel${if (workout.proMode) " • Pro" else ""}") {
+        Column {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile("Упражнений", exercises.size.toString(), Modifier.weight(1f))
+                StatTile(stringResource(R.string.sport_sets_total), totalSets.toString(), Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile(
+                    stringResource(R.string.sport_tonnage),
+                    "${"%.0f".format(tonnage)} кг",
+                    Modifier.weight(1f)
+                )
+                StatTile(
+                    stringResource(R.string.sport_record),
+                    if (maxWeight > 0f) "${"%.1f".format(maxWeight)} кг" else "${maxReps} повт.",
+                    Modifier.weight(1f)
+                )
+            }
+        }
     }
 }
 

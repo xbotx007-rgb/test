@@ -27,6 +27,8 @@ class SportRepository(
     fun entries(exerciseId: Long): Flow<List<SportEntry>> = sportDao.observeEntries(exerciseId)
     fun entriesSince(exerciseId: Long, since: Long): Flow<List<SportEntry>> =
         sportDao.observeEntriesSince(exerciseId, since)
+    fun allEntries(): Flow<List<SportEntry>> = sportDao.observeAllEntries()
+    fun entriesForWorkout(workoutId: Long): Flow<List<SportEntry>> = sportDao.observeEntriesForWorkout(workoutId)
 
     suspend fun addEntry(entry: SportEntry, label: String): Long {
         val id = sportDao.insertEntry(entry)
@@ -51,6 +53,8 @@ class SportRepository(
     suspend fun deleteEntry(entry: SportEntry) = sportDao.deleteEntry(entry)
 
     private fun estimateDuration(entry: SportEntry): Int {
+        val explicit = (entry.setDurationSec ?: 0) + (entry.restDurationSec ?: 0)
+        if (explicit > 0) return explicit
         val s = entry.sets ?: 0
         if (s > 0) return s * 60
         return 0

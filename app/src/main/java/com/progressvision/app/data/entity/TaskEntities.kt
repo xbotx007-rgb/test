@@ -11,7 +11,9 @@ data class BigTask(
     val title: String,
     val description: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val deadlineFrom: Long? = null,
+    val deadlineTo: Long? = null
 )
 
 @Entity(

@@ -15,8 +15,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -55,8 +57,10 @@ import com.progressvision.app.ProgressVisionApp
 import com.progressvision.app.R
 import com.progressvision.app.data.entity.ActivityCategory
 import com.progressvision.app.data.entity.ActivityLog
+import com.progressvision.app.data.entity.SavedDay
 import com.progressvision.app.ui.common.CategorySlice
 import com.progressvision.app.ui.common.CategoryStackBar
+import com.progressvision.app.ui.common.PieChart
 import com.progressvision.app.ui.common.SectionCard
 import com.progressvision.app.ui.common.StatTile
 import com.progressvision.app.util.Time
@@ -93,11 +97,16 @@ fun DayScreen() {
 
     val categories by vm.categories.collectAsState()
     val running by vm.running.collectAsState()
+    val savedDays by vm.savedDays.collectAsState()
 
     var showAddCategory by remember { mutableStateOf(false) }
     var showAddManual by remember { mutableStateOf(false) }
     var showCustomPeriod by remember { mutableStateOf(false) }
+    var showSaveDay by remember { mutableStateOf(false) }
+    var editingDay by remember { mutableStateOf<SavedDay?>(null) }
     var pendingDelete by remember { mutableStateOf<ActivityLog?>(null) }
+    var pendingDeleteSaved by remember { mutableStateOf<SavedDay?>(null) }
+    var selectedSavedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
     var period by remember { mutableStateOf<PeriodChoice>(PeriodChoice.Today) }
     var customDays by remember { mutableStateOf(14) }
@@ -105,6 +114,19 @@ fun DayScreen() {
     val (from, to) = remember(period, customDays) { period.rangeMs(customDays) }
     val logsFlow = remember(from, to) { vm.logsBetween(from, to) }
     val displayLogs by logsFlow.collectAsState(initial = emptyList())
+
+    // For combined stats across selected saved days.
+    val selectedSaved = remember(savedDays, selectedSavedIds) {
+        savedDays.filter { it.id in selectedSavedIds }
+    }
+    val combinedRange = remember(selectedSaved) {
+        if (selectedSaved.isEmpty()) null
+        else selectedSaved.minOf { it.fromMs } to selectedSaved.maxOf { it.toMs }
+    }
+    val combinedLogs by remember(combinedRange) {
+        if (combinedRange == null) kotlinx.coroutines.flow.flowOf(emptyList<ActivityLog>())
+        else vm.logsBetween(combinedRange.first, combinedRange.second)
+    }.collectAsState(initial = emptyList())
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_day)) }) }
@@ -152,13 +174,23 @@ fun DayScreen() {
                             }
                         }
                         Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = { showAddManual = true },
-                            colors = ButtonDefaults.filledTonalButtonColors()
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = null)
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.day_add_manual))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { showAddManual = true },
+                                colors = ButtonDefaults.filledTonalButtonColors()
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.day_add_manual))
+                            }
+                            Button(
+                                onClick = { showSaveDay = true },
+                                colors = ButtonDefaults.filledTonalButtonColors()
+                            ) {
+                                Icon(Icons.Filled.Save, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.day_save_day))
+                            }
                         }
                     }
                 }
@@ -210,6 +242,64 @@ fun DayScreen() {
                     )
                 }
             }
+
+            item {
+                SectionCard(
+                    title = stringResource(R.string.day_saved_days),
+                    trailing = {
+                        if (savedDays.isNotEmpty()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (selectedSavedIds.size < savedDays.size) {
+                                    TextButton(onClick = {
+                                        selectedSavedIds = savedDays.map { it.id }.toSet()
+                                    }) { Text(stringResource(R.string.day_saved_select_all)) }
+                                }
+                                if (selectedSavedIds.isNotEmpty()) {
+                                    TextButton(onClick = { selectedSavedIds = emptySet() }) {
+                                        Text(stringResource(R.string.day_saved_clear))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    if (savedDays.isEmpty()) {
+                        Text(
+                            stringResource(R.string.day_saved_no_items),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            savedDays.forEach { sd ->
+                                SavedDayRow(
+                                    day = sd,
+                                    selected = sd.id in selectedSavedIds,
+                                    onToggle = {
+                                        selectedSavedIds =
+                                            if (sd.id in selectedSavedIds) selectedSavedIds - sd.id
+                                            else selectedSavedIds + sd.id
+                                    },
+                                    onEdit = { editingDay = sd },
+                                    onDelete = { pendingDeleteSaved = sd }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (selectedSaved.isNotEmpty()) {
+                item {
+                    SectionCard(title = stringResource(R.string.day_saved_combined_stats)) {
+                        val days = selectedSaved
+                        val filtered = combinedLogs.filter { log ->
+                            days.any { d -> log.startedAt in d.fromMs until d.toMs }
+                        }
+                        CombinedStatsBlock(logs = filtered, categories = categories)
+                    }
+                }
+            }
         }
     }
 
@@ -240,6 +330,27 @@ fun DayScreen() {
             }
         )
     }
+    if (showSaveDay) {
+        SaveDayDialog(
+            initialFrom = from,
+            initialTo = to,
+            onDismiss = { showSaveDay = false },
+            onSave = { label, fromMs, toMs, note ->
+                vm.saveDay(label = label, fromMs = fromMs, toMs = toMs, note = note)
+                showSaveDay = false
+            }
+        )
+    }
+    editingDay?.let { day ->
+        EditSavedDayDialog(
+            day = day,
+            onDismiss = { editingDay = null },
+            onSave = { updated ->
+                vm.updateSavedDay(updated)
+                editingDay = null
+            }
+        )
+    }
     pendingDelete?.let { log ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -251,6 +362,25 @@ fun DayScreen() {
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
+    pendingDeleteSaved?.let { sd ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteSaved = null },
+            title = { Text(sd.label) },
+            text = { Text("Удалить сохранённый день?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteSavedDay(sd)
+                    selectedSavedIds = selectedSavedIds - sd.id
+                    pendingDeleteSaved = null
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteSaved = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             }
         )
     }
@@ -354,6 +484,75 @@ private fun StatsBlock(logs: List<ActivityLog>, categories: List<ActivityCategor
 }
 
 @Composable
+private fun CombinedStatsBlock(logs: List<ActivityLog>, categories: List<ActivityCategory>) {
+    val now = System.currentTimeMillis()
+    val byCategory = logs.groupBy { it.categoryId }
+        .mapValues { (_, list) -> list.sumOf { it.activeSeconds(now) } }
+    val totalSec = byCategory.values.sum()
+
+    val slices = categories.mapNotNull { cat ->
+        val sec = byCategory[cat.id] ?: 0L
+        if (sec > 0) CategorySlice(cat.name, parseColor(cat.colorHex), sec) else null
+    }
+    val uncategorized = byCategory[null] ?: 0L
+    val allSlices = if (uncategorized > 0) {
+        slices + CategorySlice("Без категории", MaterialTheme.colorScheme.outline, uncategorized)
+    } else slices
+
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            StatTile("Записей", logs.size.toString(), Modifier.weight(1f))
+            StatTile(stringResource(R.string.day_total_hours), Time.formatDuration(totalSec), Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(16.dp))
+        if (allSlices.isEmpty()) {
+            Text(
+                "Нет записей в выбранных днях.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                PieChart(slices = allSlices)
+                Column(Modifier.weight(1f)) {
+                    allSlices.forEach { slice ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier
+                                    .height(10.dp)
+                                    .width(10.dp)
+                                    .padding(end = 8.dp)
+                            ) {
+                                androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                                    drawCircle(slice.color)
+                                }
+                            }
+                            Text(
+                                slice.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                Time.formatDuration(slice.seconds),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LogRow(log: ActivityLog, categories: List<ActivityCategory>, onDelete: () -> Unit) {
     val cat = categories.firstOrNull { it.id == log.categoryId }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -399,6 +598,45 @@ private fun LogRow(log: ActivityLog, categories: List<ActivityCategory>, onDelet
 }
 
 @Composable
+private fun SavedDayRow(
+    day: SavedDay,
+    selected: Boolean,
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = { onToggle() })
+            Column(Modifier.weight(1f)) {
+                Text(day.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${Time.formatDateTime(day.fromMs)} – ${Time.formatDateTime(day.toMs)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                day.note?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.day_edit_label))
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+            }
+        }
+    }
+}
+
+@Composable
 private fun CreateCategoryDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
     AlertDialog(
@@ -433,7 +671,13 @@ private fun AddManualDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var durationMin by remember { mutableStateOf("") }
-    var selectedCat by remember { mutableStateOf<Long?>(categories.firstOrNull()?.id) }
+    // Default to "Прочее" if it exists, else first.
+    var selectedCat by remember {
+        mutableStateOf(
+            categories.firstOrNull { it.name.equals("Прочее", ignoreCase = true) }?.id
+                ?: categories.firstOrNull()?.id
+        )
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.day_add_manual)) },
@@ -521,6 +765,151 @@ private fun CustomPeriodDialog(
                 onClick = { onConfirm(days.toIntOrNull() ?: initialDays) },
                 enabled = (days.toIntOrNull() ?: 0) > 0
             ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun SaveDayDialog(
+    initialFrom: Long,
+    initialTo: Long,
+    onDismiss: () -> Unit,
+    onSave: (label: String, from: Long, to: Long, note: String?) -> Unit
+) {
+    var label by remember { mutableStateOf(Time.formatDate(initialFrom)) }
+    var fromInput by remember { mutableStateOf(Time.formatDateTime(initialFrom)) }
+    var toInput by remember { mutableStateOf(Time.formatDateTime(initialTo)) }
+    var note by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.day_save_day)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text(stringResource(R.string.day_saved_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = fromInput,
+                    onValueChange = { fromInput = it; error = null },
+                    label = { Text(stringResource(R.string.task_deadline_from)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = toInput,
+                    onValueChange = { toInput = it; error = null },
+                    label = { Text(stringResource(R.string.task_deadline_to)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text(stringResource(R.string.day_saved_note)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                error?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val from = Time.parseDateTime(fromInput)
+                val to = Time.parseDateTime(toInput)
+                if (from == null || to == null || to <= from) {
+                    error = "Проверьте даты"
+                    return@TextButton
+                }
+                onSave(label.ifBlank { Time.formatDate(from) }, from, to, note.ifBlank { null })
+            }) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun EditSavedDayDialog(
+    day: SavedDay,
+    onDismiss: () -> Unit,
+    onSave: (SavedDay) -> Unit
+) {
+    var label by remember { mutableStateOf(day.label) }
+    var fromInput by remember { mutableStateOf(Time.formatDateTime(day.fromMs)) }
+    var toInput by remember { mutableStateOf(Time.formatDateTime(day.toMs)) }
+    var note by remember { mutableStateOf(day.note.orEmpty()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.day_edit_label)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text(stringResource(R.string.day_saved_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = fromInput,
+                    onValueChange = { fromInput = it; error = null },
+                    label = { Text(stringResource(R.string.task_deadline_from)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = toInput,
+                    onValueChange = { toInput = it; error = null },
+                    label = { Text(stringResource(R.string.task_deadline_to)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text(stringResource(R.string.day_saved_note)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                error?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val from = Time.parseDateTime(fromInput)
+                val to = Time.parseDateTime(toInput)
+                if (from == null || to == null || to <= from) {
+                    error = "Проверьте даты"; return@TextButton
+                }
+                onSave(
+                    day.copy(
+                        label = label.ifBlank { Time.formatDate(from) },
+                        fromMs = from,
+                        toMs = to,
+                        note = note.ifBlank { null }
+                    )
+                )
+            }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }

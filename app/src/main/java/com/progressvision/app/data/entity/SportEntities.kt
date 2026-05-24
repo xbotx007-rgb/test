@@ -7,10 +7,14 @@ import androidx.room.PrimaryKey
 
 enum class SportType { STRENGTH, BODYWEIGHT, CARDIO }
 
+enum class SportWorkoutType { REGULAR, MEASUREMENT }
+
 @Entity(tableName = "sport_workout")
 data class SportWorkout(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
+    val type: SportWorkoutType = SportWorkoutType.REGULAR,
+    val proMode: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -56,7 +60,12 @@ data class SportEntry(
     val weightKg: Float? = null,
     val distanceKm: Float? = null,
     val durationSec: Int? = null,
-    val note: String? = null
+    val note: String? = null,
+    // Pro mode timing/pulse data (optional)
+    val setDurationSec: Int? = null,
+    val restDurationSec: Int? = null,
+    val pulseBefore: Int? = null,
+    val pulseAfter: Int? = null
 ) {
     fun primaryMetric(type: SportType): Float = when (type) {
         SportType.STRENGTH -> {
@@ -71,5 +80,10 @@ data class SportEntry(
             (s * r).toFloat()
         }
         SportType.CARDIO -> distanceKm ?: ((durationSec ?: 0) / 60f)
+    }
+
+    fun tonnage(type: SportType): Float = when (type) {
+        SportType.STRENGTH -> (sets ?: 0) * (reps ?: 0) * (weightKg ?: 0f)
+        else -> 0f
     }
 }

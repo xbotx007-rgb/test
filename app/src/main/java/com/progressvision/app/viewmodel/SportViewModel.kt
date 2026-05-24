@@ -7,6 +7,7 @@ import com.progressvision.app.data.entity.SportEntry
 import com.progressvision.app.data.entity.SportExercise
 import com.progressvision.app.data.entity.SportType
 import com.progressvision.app.data.entity.SportWorkout
+import com.progressvision.app.data.entity.SportWorkoutType
 import com.progressvision.app.data.repository.SportRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,11 +20,21 @@ class SportViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
     val workouts: StateFlow<List<SportWorkout>> = repo.workouts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun createWorkout(name: String) {
+    fun createWorkout(
+        name: String,
+        type: SportWorkoutType = SportWorkoutType.REGULAR,
+        proMode: Boolean = false
+    ) {
         if (name.isBlank()) return
         viewModelScope.launch {
-            repo.upsertWorkout(SportWorkout(name = name.trim()))
+            repo.upsertWorkout(
+                SportWorkout(name = name.trim(), type = type, proMode = proMode)
+            )
         }
+    }
+
+    fun updateWorkout(workout: SportWorkout) {
+        viewModelScope.launch { repo.upsertWorkout(workout) }
     }
 
     fun deleteWorkout(workout: SportWorkout) {
@@ -50,6 +61,8 @@ class SportViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
 
     fun entries(exerciseId: Long) = repo.entries(exerciseId)
     fun entriesSince(exerciseId: Long, since: Long) = repo.entriesSince(exerciseId, since)
+    fun allEntries() = repo.allEntries()
+    fun entriesForWorkout(workoutId: Long) = repo.entriesForWorkout(workoutId)
 
     fun addEntry(entry: SportEntry, label: String) {
         viewModelScope.launch { repo.addEntry(entry, label) }
