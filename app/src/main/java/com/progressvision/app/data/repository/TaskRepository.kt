@@ -24,8 +24,24 @@ class TaskRepository(
     suspend fun upsertSubTask(sub: SubTask): Long = taskDao.insertSubTask(sub)
     suspend fun updateSubTask(sub: SubTask) = taskDao.updateSubTask(sub)
     suspend fun deleteSubTask(sub: SubTask) = taskDao.deleteSubTask(sub)
-    suspend fun toggleSubTask(sub: SubTask) =
+    suspend fun toggleSubTask(sub: SubTask) {
         taskDao.updateSubTask(sub.copy(isDone = !sub.isDone))
+        refreshCompletion(sub.bigTaskId)
+    }
+
+    private suspend fun refreshCompletion(bigTaskId: Long) {
+        val parent = taskDao.getBigTask(bigTaskId) ?: return
+        val subs = taskDao.observeSubTasks(bigTaskId).first()
+        val allDone = subs.isNotEmpty() && subs.all { it.isDone }
+        val newCompletedAt = when {
+            allDone && parent.completedAt == null -> System.currentTimeMillis()
+            !allDone && parent.completedAt != null -> null
+            else -> parent.completedAt
+        }
+        if (newCompletedAt != parent.completedAt) {
+            taskDao.updateBigTask(parent.copy(completedAt = newCompletedAt))
+        }
+    }
 
     /**
      * Record a timer session for a subtask. Adds [activeSec] to its time spent and

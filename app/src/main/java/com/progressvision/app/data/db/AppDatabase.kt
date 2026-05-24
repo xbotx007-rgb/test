@@ -5,11 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.progressvision.app.data.entity.ActivityCategory
 import com.progressvision.app.data.entity.ActivityLog
 import com.progressvision.app.data.entity.BigTask
+import com.progressvision.app.data.entity.SavedDay
 import com.progressvision.app.data.entity.SportEntry
 import com.progressvision.app.data.entity.SportExercise
 import com.progressvision.app.data.entity.SportWorkout
@@ -23,9 +23,10 @@ import com.progressvision.app.data.entity.SubTask
         BigTask::class,
         SubTask::class,
         ActivityCategory::class,
-        ActivityLog::class
+        ActivityLog::class,
+        SavedDay::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -59,7 +60,8 @@ abstract class AppDatabase : RoomDatabase() {
                     "('Спорт', '#388E3C', 2)," +
                     "('Отдых', '#F57C00', 3)," +
                     "('Сон', '#455A64', 4)," +
-                    "('Хобби', '#C2185B', 5)"
+                    "('Хобби', '#C2185B', 5)," +
+                    "('Прочее', '#607D8B', 6)"
             )
         }
     }

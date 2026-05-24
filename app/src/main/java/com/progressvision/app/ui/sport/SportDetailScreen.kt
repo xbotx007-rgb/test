@@ -47,12 +47,14 @@ import com.progressvision.app.R
 import com.progressvision.app.data.entity.SportEntry
 import com.progressvision.app.data.entity.SportExercise
 import com.progressvision.app.data.entity.SportType
+import com.progressvision.app.data.entity.SportWorkout
 import com.progressvision.app.ui.common.LineChart
 import com.progressvision.app.ui.common.SectionCard
 import com.progressvision.app.ui.common.StatTile
 import com.progressvision.app.util.Time
 import com.progressvision.app.viewmodel.AppViewModelFactory
 import com.progressvision.app.viewmodel.SportViewModel
+import kotlinx.coroutines.delay
 
 private sealed class Range(val days: Int, val labelRes: Int) {
     object D7 : Range(7, R.string.sport_progress_7d)
@@ -76,8 +78,14 @@ fun SportDetailScreen(exerciseId: Long, onBack: () -> Unit) {
     val vm: SportViewModel = viewModel(factory = AppViewModelFactory(app))
 
     var exercise by remember { mutableStateOf<SportExercise?>(null) }
-    LaunchedEffect(exerciseId) { exercise = vm.getExercise(exerciseId) }
+    var parentWorkout by remember { mutableStateOf<SportWorkout?>(null) }
+    LaunchedEffect(exerciseId) {
+        val ex = vm.getExercise(exerciseId)
+        exercise = ex
+        parentWorkout = ex?.let { vm.getWorkout(it.workoutId) }
+    }
     val current = exercise ?: return
+    val proMode = parentWorkout?.proMode == true
 
     var range by remember { mutableStateOf<Range>(Range.D30) }
     var customDays by remember { mutableStateOf(60) }
@@ -184,16 +192,29 @@ fun SportDetailScreen(exerciseId: Long, onBack: () -> Unit) {
     }
 
     if (showAdd) {
-        AddEntryDialog(
-            type = current.type,
-            onDismiss = { showAdd = false },
-            onSave = { entries ->
-                entries.forEach { e ->
-                    vm.addEntry(e.copy(exerciseId = exerciseId), current.name)
+        if (proMode && current.type != SportType.CARDIO) {
+            ProAddEntryDialog(
+                type = current.type,
+                onDismiss = { showAdd = false },
+                onSave = { entries ->
+                    entries.forEach { e ->
+                        vm.addEntry(e.copy(exerciseId = exerciseId), current.name)
+                    }
+                    showAdd = false
                 }
-                showAdd = false
-            }
-        )
+            )
+        } else {
+            AddEntryDialog(
+                type = current.type,
+                onDismiss = { showAdd = false },
+                onSave = { entries ->
+                    entries.forEach { e ->
+                        vm.addEntry(e.copy(exerciseId = exerciseId), current.name)
+                    }
+                    showAdd = false
+                }
+            )
+        }
     }
     if (showCustomPeriod) {
         CustomPeriodDialog(
@@ -258,6 +279,19 @@ private fun EntryRow(entry: SportEntry, type: SportType, onDelete: () -> Unit) {
                 Text(Time.formatDate(entry.date), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
                 Text(describeEntry(entry, type), style = MaterialTheme.typography.bodyMedium)
+                val proParts = buildList {
+                    entry.setDurationSec?.let { add("подход ${Time.formatDuration(it.toLong())}") }
+                    entry.restDurationSec?.let { add("отдых ${Time.formatDuration(it.toLong())}") }
+                    entry.pulseBefore?.let { add("пульс ${it} → ${entry.pulseAfter?.toString() ?: "—"}") }
+                }
+                if (proParts.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        proParts.joinToString(" • "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 entry.note?.let {
                     Spacer(Modifier.height(2.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -475,6 +509,178 @@ private fun CustomPeriodDialog(
             TextButton(
                 onClick = { onConfirm(days.toIntOrNull() ?: initialDays) },
                 enabled = (days.toIntOrNull() ?: 0) > 0
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
+}
+
+private data class ProSet(
+    val reps: String = "",
+    val weight: String = "",
+    val setDurationSec: Int? = null,
+    val restDurationSec: Int? = null,
+    val pulseBefore: String = "",
+    val pulseAfter: String = ""
+)
+
+private enum class ProPhase { IDLE, SETTING, RESTING }
+
+@Composable
+private fun ProAddEntryDialog(
+    type: SportType,
+    onDismiss: () -> Unit,
+    onSave: (List<SportEntry>) -> Unit
+) {
+    var sets by remember { mutableStateOf(listOf<ProSet>()) }
+    var current by remember { mutableStateOf(ProSet()) }
+    var phase by remember { mutableStateOf(ProPhase.IDLE) }
+    var phaseStartMs by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    var nowMs by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
+    var note by remember { mutableStateOf("") }
+
+    LaunchedEffect(phase) {
+        while (phase != ProPhase.IDLE) {
+            delay(250)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+
+    val elapsedSec = ((nowMs - phaseStartMs) / 1000L).coerceAtLeast(0L)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pro: ${stringResource(R.string.sport_add_entry)}") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = when (phase) {
+                        ProPhase.IDLE -> "Готов к подходу #${sets.size + 1}"
+                        ProPhase.SETTING -> "Подход #${sets.size + 1} идёт"
+                        ProPhase.RESTING -> "Отдых после подхода #${sets.size}"
+                    },
+                    style = MaterialTheme.typography.labelLarge
+                )
+                if (phase != ProPhase.IDLE) {
+                    Text(
+                        Time.formatStopwatch(elapsedSec),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = current.reps,
+                        onValueChange = { v -> current = current.copy(reps = v.filter { it.isDigit() }) },
+                        label = { Text(stringResource(R.string.sport_reps)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (type == SportType.STRENGTH) {
+                        OutlinedTextField(
+                            value = current.weight,
+                            onValueChange = { v ->
+                                current = current.copy(
+                                    weight = v.filter { it.isDigit() || it == '.' || it == ',' }
+                                )
+                            },
+                            label = { Text(stringResource(R.string.sport_weight)) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = current.pulseBefore,
+                        onValueChange = { v ->
+                            current = current.copy(pulseBefore = v.filter { it.isDigit() })
+                        },
+                        label = { Text(stringResource(R.string.sport_pro_pulse_before)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = current.pulseAfter,
+                        onValueChange = { v ->
+                            current = current.copy(pulseAfter = v.filter { it.isDigit() })
+                        },
+                        label = { Text(stringResource(R.string.sport_pro_pulse_after)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when (phase) {
+                        ProPhase.IDLE -> {
+                            TextButton(onClick = {
+                                phase = ProPhase.SETTING
+                                phaseStartMs = System.currentTimeMillis()
+                                nowMs = phaseStartMs
+                            }) { Text(stringResource(R.string.sport_pro_start_set)) }
+                        }
+                        ProPhase.SETTING -> {
+                            TextButton(onClick = {
+                                val setDur = ((System.currentTimeMillis() - phaseStartMs) / 1000L).toInt()
+                                current = current.copy(setDurationSec = setDur)
+                                phase = ProPhase.RESTING
+                                phaseStartMs = System.currentTimeMillis()
+                                nowMs = phaseStartMs
+                            }) { Text(stringResource(R.string.sport_pro_end_set)) }
+                        }
+                        ProPhase.RESTING -> {
+                            TextButton(onClick = {
+                                val restDur = ((System.currentTimeMillis() - phaseStartMs) / 1000L).toInt()
+                                val completed = current.copy(restDurationSec = restDur)
+                                sets = sets + completed
+                                current = ProSet()
+                                phase = ProPhase.IDLE
+                            }) { Text("Сохранить подход") }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Сохранено подходов: ${sets.size}", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text(stringResource(R.string.sport_notes)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    // If a set is currently in progress, ignore it (user must finish via Rest).
+                    val baseDate = System.currentTimeMillis()
+                    val list = sets.mapIndexedNotNull { i, s ->
+                        val reps = s.reps.toIntOrNull() ?: return@mapIndexedNotNull null
+                        if (reps <= 0) return@mapIndexedNotNull null
+                        SportEntry(
+                            exerciseId = 0,
+                            date = baseDate + i,
+                            sets = 1,
+                            reps = reps,
+                            weightKg = if (type == SportType.STRENGTH)
+                                s.weight.replace(',', '.').toFloatOrNull()
+                            else null,
+                            note = if (i == 0) note.ifBlank { null } else null,
+                            setDurationSec = s.setDurationSec,
+                            restDurationSec = s.restDurationSec,
+                            pulseBefore = s.pulseBefore.toIntOrNull(),
+                            pulseAfter = s.pulseAfter.toIntOrNull()
+                        )
+                    }
+                    if (list.isNotEmpty()) onSave(list)
+                },
+                enabled = sets.isNotEmpty()
             ) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
