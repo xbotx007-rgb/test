@@ -14,7 +14,7 @@ data class SportWorkout(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val type: SportWorkoutType = SportWorkoutType.REGULAR,
-    val proMode: Boolean = false,
+    val proMode: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )
 

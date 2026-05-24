@@ -223,7 +223,7 @@ private fun CreateWorkoutDialog(
 ) {
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(SportWorkoutType.REGULAR) }
-    var proMode by remember { mutableStateOf(false) }
+    var proMode by remember { mutableStateOf(true) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.sport_create_workout)) },

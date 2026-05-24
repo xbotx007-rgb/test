@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -23,8 +23,6 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -148,6 +146,52 @@ fun DayScreen() {
             }
 
             item {
+                SectionCard(title = stringResource(R.string.day_period)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val choices = listOf(
+                            PeriodChoice.Today, PeriodChoice.Week,
+                            PeriodChoice.Month, PeriodChoice.TwoMonths,
+                            PeriodChoice.Custom
+                        )
+                        choices.forEach { choice ->
+                            FilterChip(
+                                selected = period == choice,
+                                onClick = {
+                                    period = choice
+                                    if (choice == PeriodChoice.Custom) showCustomPeriod = true
+                                },
+                                label = {
+                                    val label = if (choice == PeriodChoice.Custom && period == PeriodChoice.Custom)
+                                        stringResource(R.string.day_custom_n_days, customDays)
+                                    else stringResource(choice.labelRes)
+                                    Text(label)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = stringResource(R.string.day_balance),
+                    trailing = {
+                        TextButton(onClick = { showSaveDay = true }) {
+                            Icon(Icons.Filled.Save, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.day_save_day))
+                        }
+                    }
+                ) {
+                    StatsBlock(logs = displayLogs, categories = categories)
+                }
+            }
+
+            item {
                 SectionCard(
                     title = stringResource(R.string.day_quick_add),
                     trailing = {
@@ -156,90 +200,53 @@ fun DayScreen() {
                         }
                     }
                 ) {
-                    Column {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            categories.forEach { cat ->
-                                AssistChip(
-                                    onClick = { vm.startQuick(cat) },
-                                    label = { Text(cat.name) },
-                                    leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                                    colors = AssistChipDefaults.assistChipColors(
-                                        labelColor = parseColor(cat.colorHex)
-                                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        categories.forEach { cat ->
+                            AssistChip(
+                                onClick = { vm.startQuick(cat) },
+                                label = { Text(cat.name) },
+                                leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    labelColor = parseColor(cat.colorHex)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = stringResource(R.string.day_logs),
+                    trailing = {
+                        TextButton(onClick = { showAddManual = true }) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.day_add_manual))
+                        }
+                    }
+                ) {
+                    if (displayLogs.isEmpty()) {
+                        Text(
+                            stringResource(R.string.day_no_logs),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            displayLogs.forEach { log ->
+                                LogRow(
+                                    log = log,
+                                    categories = categories,
+                                    onDelete = { pendingDelete = log }
                                 )
                             }
                         }
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { showAddManual = true },
-                                colors = ButtonDefaults.filledTonalButtonColors()
-                            ) {
-                                Icon(Icons.Filled.Add, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.day_add_manual))
-                            }
-                            Button(
-                                onClick = { showSaveDay = true },
-                                colors = ButtonDefaults.filledTonalButtonColors()
-                            ) {
-                                Icon(Icons.Filled.Save, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.day_save_day))
-                            }
-                        }
                     }
-                }
-            }
-
-            item {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val choices = listOf(
-                        PeriodChoice.Today, PeriodChoice.Week,
-                        PeriodChoice.Month, PeriodChoice.TwoMonths,
-                        PeriodChoice.Custom
-                    )
-                    choices.forEach { choice ->
-                        FilterChip(
-                            selected = period == choice,
-                            onClick = {
-                                period = choice
-                                if (choice == PeriodChoice.Custom) showCustomPeriod = true
-                            },
-                            label = {
-                                val label = if (choice == PeriodChoice.Custom && period == PeriodChoice.Custom)
-                                    stringResource(R.string.day_custom_n_days, customDays)
-                                else stringResource(choice.labelRes)
-                                Text(label)
-                            }
-                        )
-                    }
-                }
-            }
-
-            item {
-                SectionCard(title = stringResource(R.string.day_balance)) {
-                    StatsBlock(logs = displayLogs, categories = categories)
-                }
-            }
-
-            if (displayLogs.isEmpty()) {
-                item { EmptyHint(stringResource(R.string.day_no_logs)) }
-            } else {
-                items(displayLogs, key = { it.id }) { log ->
-                    LogRow(
-                        log = log,
-                        categories = categories,
-                        onDelete = { pendingDelete = log }
-                    )
                 }
             }
 
@@ -382,20 +389,6 @@ fun DayScreen() {
                     Text(stringResource(R.string.action_cancel))
                 }
             }
-        )
-    }
-}
-
-@Composable
-private fun EmptyHint(text: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Text(
-            text,
-            modifier = Modifier.padding(20.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -842,22 +835,57 @@ private fun SaveDayDialog(
     )
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun EditSavedDayDialog(
     day: SavedDay,
     onDismiss: () -> Unit,
     onSave: (SavedDay) -> Unit
 ) {
+    val ctx = LocalContext.current
+    val app = ctx.applicationContext as ProgressVisionApp
+    val vm: DayViewModel = viewModel(factory = AppViewModelFactory(app))
+    val categories by vm.categories.collectAsState()
+    val logs by remember(day.fromMs, day.toMs) {
+        vm.logsBetween(day.fromMs, day.toMs)
+    }.collectAsState(initial = emptyList())
+
     var label by remember { mutableStateOf(day.label) }
     var fromInput by remember { mutableStateOf(Time.formatDateTime(day.fromMs)) }
     var toInput by remember { mutableStateOf(Time.formatDateTime(day.toMs)) }
     var note by remember { mutableStateOf(day.note.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
+
+    var editingLog by remember { mutableStateOf<ActivityLog?>(null) }
+    var addingLog by remember { mutableStateOf(false) }
+
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.day_edit_label)) },
-        text = {
-            Column {
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        androidx.compose.material3.Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .padding(vertical = 24.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            ) {
+                Text(
+                    stringResource(R.string.day_edit_label),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(16.dp))
+
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
@@ -892,21 +920,234 @@ private fun EditSavedDayDialog(
                     Spacer(Modifier.height(4.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
+
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        stringResource(R.string.day_edit_contents),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { addingLog = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.day_edit_add_log))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                if (logs.isEmpty()) {
+                    Text(
+                        stringResource(R.string.day_edit_no_logs),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        logs.forEach { log ->
+                            EditableLogRow(
+                                log = log,
+                                categories = categories,
+                                onEdit = { editingLog = log },
+                                onDelete = { vm.deleteLog(log) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        val from = Time.parseDateTime(fromInput)
+                        val to = Time.parseDateTime(toInput)
+                        if (from == null || to == null || to <= from) {
+                            error = "Проверьте даты"
+                            return@TextButton
+                        }
+                        onSave(
+                            day.copy(
+                                label = label.ifBlank { Time.formatDate(from) },
+                                fromMs = from,
+                                toMs = to,
+                                note = note.ifBlank { null }
+                            )
+                        )
+                    }) { Text(stringResource(R.string.action_save)) }
+                }
+            }
+        }
+    }
+
+    editingLog?.let { log ->
+        EditLogDialog(
+            log = log,
+            categories = categories,
+            onDismiss = { editingLog = null },
+            onSave = { updated ->
+                vm.saveLog(updated)
+                editingLog = null
+            }
+        )
+    }
+    if (addingLog) {
+        EditLogDialog(
+            log = ActivityLog(
+                categoryId = categories.firstOrNull()?.id,
+                title = "",
+                startedAt = day.fromMs,
+                endedAt = (day.fromMs + 60 * 60_000L).coerceAtMost(day.toMs)
+            ),
+            categories = categories,
+            onDismiss = { addingLog = false },
+            onSave = { newLog ->
+                vm.saveLog(newLog)
+                addingLog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun EditableLogRow(
+    log: ActivityLog,
+    categories: List<ActivityCategory>,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val cat = categories.firstOrNull { it.id == log.categoryId }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(log.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    buildString {
+                        append(Time.formatTime(log.startedAt))
+                        log.endedAt?.let { append("–${Time.formatTime(it)}") }
+                        append(" • ")
+                        append(Time.formatDuration(log.activeSeconds()))
+                        cat?.let { append(" • ${it.name}") }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Filled.Edit, contentDescription = null)
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun EditLogDialog(
+    log: ActivityLog,
+    categories: List<ActivityCategory>,
+    onDismiss: () -> Unit,
+    onSave: (ActivityLog) -> Unit
+) {
+    var title by remember { mutableStateOf(log.title) }
+    var startedInput by remember { mutableStateOf(Time.formatDateTime(log.startedAt)) }
+    var endedInput by remember {
+        mutableStateOf(log.endedAt?.let { Time.formatDateTime(it) } ?: "")
+    }
+    var selectedCat by remember { mutableStateOf(log.categoryId) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (log.id == 0L) stringResource(R.string.day_edit_add_log) else stringResource(R.string.day_edit_label))
+        },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(stringResource(R.string.day_edit_log_title)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = startedInput,
+                    onValueChange = { startedInput = it; error = null },
+                    label = { Text(stringResource(R.string.day_edit_log_started)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = endedInput,
+                    onValueChange = { endedInput = it; error = null },
+                    label = { Text(stringResource(R.string.day_edit_log_ended)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    stringResource(R.string.day_edit_log_category),
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Spacer(Modifier.height(4.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    categories.forEach { cat ->
+                        FilterChip(
+                            selected = selectedCat == cat.id,
+                            onClick = { selectedCat = cat.id },
+                            label = { Text(cat.name) }
+                        )
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val from = Time.parseDateTime(fromInput)
-                val to = Time.parseDateTime(toInput)
-                if (from == null || to == null || to <= from) {
-                    error = "Проверьте даты"; return@TextButton
+                val started = Time.parseDateTime(startedInput)
+                val ended = if (endedInput.isBlank()) null else Time.parseDateTime(endedInput)
+                if (started == null) {
+                    error = "Проверьте дату начала"; return@TextButton
+                }
+                if (ended != null && ended <= started) {
+                    error = "Конец должен быть позже начала"; return@TextButton
+                }
+                if (title.isBlank()) {
+                    error = "Укажите название"; return@TextButton
                 }
                 onSave(
-                    day.copy(
-                        label = label.ifBlank { Time.formatDate(from) },
-                        fromMs = from,
-                        toMs = to,
-                        note = note.ifBlank { null }
+                    log.copy(
+                        title = title.trim(),
+                        startedAt = started,
+                        endedAt = ended,
+                        categoryId = selectedCat,
+                        // Reset paused state when editing - editor is for completed logs.
+                        pausedAt = null
                     )
                 )
             }) { Text(stringResource(R.string.action_save)) }

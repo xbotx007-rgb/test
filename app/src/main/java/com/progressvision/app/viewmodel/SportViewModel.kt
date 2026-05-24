@@ -23,7 +23,7 @@ class SportViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
     fun createWorkout(
         name: String,
         type: SportWorkoutType = SportWorkoutType.REGULAR,
-        proMode: Boolean = false
+        proMode: Boolean = true
     ) {
         if (name.isBlank()) return
         viewModelScope.launch {

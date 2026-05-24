@@ -62,6 +62,13 @@ class DayViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
         viewModelScope.launch { repo.updateLog(log) }
     }
 
+    fun saveLog(log: ActivityLog) {
+        viewModelScope.launch {
+            if (log.id == 0L) repo.addManual(log)
+            else repo.updateLog(log)
+        }
+    }
+
     fun addManual(categoryId: Long?, title: String, startedAt: Long, endedAt: Long) {
         if (title.isBlank()) return
         viewModelScope.launch {
