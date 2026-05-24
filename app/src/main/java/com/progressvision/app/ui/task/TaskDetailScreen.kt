@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -73,6 +74,7 @@ fun TaskDetailScreen(bigTaskId: Long, onBack: () -> Unit) {
 
     var showAdd by remember { mutableStateOf(false) }
     var timerSub by remember { mutableStateOf<SubTask?>(null) }
+    var showDeleteTask by remember { mutableStateOf(false) }
 
     val current = task ?: return
 
@@ -83,6 +85,14 @@ fun TaskDetailScreen(bigTaskId: Long, onBack: () -> Unit) {
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showDeleteTask = true }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = stringResource(R.string.action_delete)
+                        )
                     }
                 }
             )
@@ -129,12 +139,32 @@ fun TaskDetailScreen(bigTaskId: Long, onBack: () -> Unit) {
         )
     }
 
+    if (showDeleteTask) {
+        AlertDialog(
+            onDismissRequest = { showDeleteTask = false },
+            title = { Text(current.title) },
+            text = { Text("Удалить задачу вместе со всеми подзадачами?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteBigTask(current)
+                    showDeleteTask = false
+                    onBack()
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteTask = false }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
+
     timerSub?.let { sub ->
         TimerDialog(
             sub = sub,
             onDismiss = { timerSub = null },
-            onFinish = { started, ended ->
-                vm.recordSubTaskTime(sub, current.title, started, ended)
+            onFinish = { activeSec, startedAt, endedAt ->
+                if (activeSec > 0) {
+                    vm.recordSubTaskTime(sub, current.title, activeSec, startedAt, endedAt)
+                }
                 timerSub = null
             }
         )
@@ -192,25 +222,15 @@ private fun SubTaskRow(
                     style = MaterialTheme.typography.bodyLarge,
                     textDecoration = if (sub.isDone) TextDecoration.LineThrough else null
                 )
-                if (sub.timeSpentSec > 0 || sub.weight > 1) {
-                    Row {
-                        if (sub.timeSpentSec > 0) {
-                            Text(
-                                Time.formatDuration(sub.timeSpentSec),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (sub.weight > 1) {
-                            if (sub.timeSpentSec > 0) Text(" • ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                "вес ${sub.weight}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                val parts = buildList {
+                    add(Time.formatDuration(sub.timeSpentSec))
+                    if (sub.weight > 1) add("вес ${sub.weight}")
                 }
+                Text(
+                    text = parts.joinToString(" • "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             IconButton(onClick = onStartTimer) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.task_timer))
@@ -264,17 +284,25 @@ private fun AddSubTaskDialog(onDismiss: () -> Unit, onAdd: (String, Int) -> Unit
 private fun TimerDialog(
     sub: SubTask,
     onDismiss: () -> Unit,
-    onFinish: (startedAt: Long, endedAt: Long) -> Unit
+    onFinish: (activeSec: Long, startedAt: Long, endedAt: Long) -> Unit
 ) {
-    var running by remember { mutableStateOf(true) }
     val startedAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var elapsedSec by remember { mutableStateOf(0L) }
+    var running by remember { mutableStateOf(true) }
+    var accumulatedSec by remember { mutableStateOf(0L) }
+    var lastResumeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(running) {
         while (running) {
-            delay(1000)
-            elapsedSec = (System.currentTimeMillis() - startedAt) / 1000
+            delay(250)
+            nowMs = System.currentTimeMillis()
         }
+    }
+
+    val activeSec = if (running) {
+        accumulatedSec + (nowMs - lastResumeMs) / 1000
+    } else {
+        accumulatedSec
     }
 
     AlertDialog(
@@ -283,15 +311,30 @@ private fun TimerDialog(
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    Time.formatStopwatch(elapsedSec),
+                    Time.formatStopwatch(activeSec),
                     style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = if (running) "идёт" else "пауза",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = { running = !running }) {
+                    FilledTonalButton(onClick = {
+                        if (running) {
+                            accumulatedSec += (System.currentTimeMillis() - lastResumeMs) / 1000
+                            running = false
+                        } else {
+                            lastResumeMs = System.currentTimeMillis()
+                            nowMs = lastResumeMs
+                            running = true
+                        }
+                    }) {
                         Icon(
-                            if (running) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                            if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             contentDescription = null
                         )
                         Spacer(Modifier.width(6.dp))
@@ -301,7 +344,13 @@ private fun TimerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onFinish(startedAt, System.currentTimeMillis()) }) {
+            TextButton(onClick = {
+                val finalActive = if (running)
+                    accumulatedSec + (System.currentTimeMillis() - lastResumeMs) / 1000
+                else
+                    accumulatedSec
+                onFinish(finalActive, startedAt, System.currentTimeMillis())
+            }) {
                 Text("Сохранить")
             }
         },

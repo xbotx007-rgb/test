@@ -23,7 +23,7 @@ import com.progressvision.app.data.entity.SubTask
         ActivityCategory::class,
         ActivityLog::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -42,6 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
                 "progressvision.db"
             )
                 .addCallback(SeedCallback)
+                .fallbackToDestructiveMigration()
                 .build()
                 .also { INSTANCE = it }
         }

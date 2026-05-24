@@ -27,12 +27,49 @@ class DayRepository(private val dao: DayDao) {
 
     suspend fun stopRunning(): Boolean {
         val current = dao.getRunning() ?: return false
-        dao.updateLog(current.copy(endedAt = System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        val pauseExtra = current.pausedAt?.let { (now - it).coerceAtLeast(0L) } ?: 0L
+        dao.updateLog(
+            current.copy(
+                endedAt = now,
+                pausedAt = null,
+                pauseAccumulatedMs = current.pauseAccumulatedMs + pauseExtra
+            )
+        )
+        return true
+    }
+
+    suspend fun pauseRunning(): Boolean {
+        val current = dao.getRunning() ?: return false
+        if (current.pausedAt != null) return false
+        dao.updateLog(current.copy(pausedAt = System.currentTimeMillis()))
+        return true
+    }
+
+    suspend fun resumeRunning(): Boolean {
+        val current = dao.getRunning() ?: return false
+        val pausedAt = current.pausedAt ?: return false
+        val now = System.currentTimeMillis()
+        val pauseExtra = (now - pausedAt).coerceAtLeast(0L)
+        dao.updateLog(
+            current.copy(
+                pausedAt = null,
+                pauseAccumulatedMs = current.pauseAccumulatedMs + pauseExtra
+            )
+        )
         return true
     }
 
     suspend fun stopLog(log: ActivityLog) {
-        dao.updateLog(log.copy(endedAt = System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        val pauseExtra = log.pausedAt?.let { (now - it).coerceAtLeast(0L) } ?: 0L
+        dao.updateLog(
+            log.copy(
+                endedAt = now,
+                pausedAt = null,
+                pauseAccumulatedMs = log.pauseAccumulatedMs + pauseExtra
+            )
+        )
     }
 
     suspend fun addManual(log: ActivityLog): Long = dao.insertLog(log)

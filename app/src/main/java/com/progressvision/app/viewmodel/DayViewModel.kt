@@ -6,7 +6,6 @@ import com.progressvision.app.ProgressVisionApp
 import com.progressvision.app.data.entity.ActivityCategory
 import com.progressvision.app.data.entity.ActivityLog
 import com.progressvision.app.data.repository.DayRepository
-import com.progressvision.app.util.Time
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -20,12 +19,6 @@ class DayViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
 
     val running: StateFlow<ActivityLog?> = repo.running()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    val todayLogs: StateFlow<List<ActivityLog>> = repo.logsBetween(Time.startOfDay(), Time.endOfDay())
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val weekLogs: StateFlow<List<ActivityLog>> = repo.logsBetween(Time.startOfWeek(), Time.endOfDay())
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun createCategory(name: String) {
         if (name.isBlank()) return
@@ -45,6 +38,16 @@ class DayViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
     fun stopRunning() {
         viewModelScope.launch { repo.stopRunning() }
     }
+
+    fun pauseRunning() {
+        viewModelScope.launch { repo.pauseRunning() }
+    }
+
+    fun resumeRunning() {
+        viewModelScope.launch { repo.resumeRunning() }
+    }
+
+    fun logsBetween(from: Long, to: Long) = repo.logsBetween(from, to)
 
     fun deleteLog(log: ActivityLog) {
         viewModelScope.launch { repo.deleteLog(log) }

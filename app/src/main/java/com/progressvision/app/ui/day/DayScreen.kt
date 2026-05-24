@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,13 +57,32 @@ import com.progressvision.app.data.entity.ActivityCategory
 import com.progressvision.app.data.entity.ActivityLog
 import com.progressvision.app.ui.common.CategorySlice
 import com.progressvision.app.ui.common.CategoryStackBar
-import com.progressvision.app.ui.common.EmptyState
 import com.progressvision.app.ui.common.SectionCard
 import com.progressvision.app.ui.common.StatTile
 import com.progressvision.app.util.Time
 import com.progressvision.app.viewmodel.AppViewModelFactory
 import com.progressvision.app.viewmodel.DayViewModel
 import kotlinx.coroutines.delay
+
+private sealed class PeriodChoice(val labelRes: Int) {
+    object Today : PeriodChoice(R.string.day_today)
+    object Week : PeriodChoice(R.string.day_week)
+    object Month : PeriodChoice(R.string.day_month)
+    object TwoMonths : PeriodChoice(R.string.day_two_months)
+    object Custom : PeriodChoice(R.string.day_custom_period)
+}
+
+private fun PeriodChoice.rangeMs(customDays: Int): Pair<Long, Long> {
+    val now = System.currentTimeMillis()
+    val endOfToday = Time.endOfDay(now)
+    return when (this) {
+        PeriodChoice.Today -> Time.startOfDay(now) to endOfToday
+        PeriodChoice.Week -> Time.startOfWeek(now) to endOfToday
+        PeriodChoice.Month -> Time.daysAgo(30) to endOfToday
+        PeriodChoice.TwoMonths -> Time.daysAgo(60) to endOfToday
+        PeriodChoice.Custom -> Time.daysAgo(customDays.coerceAtLeast(1)) to endOfToday
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -72,13 +93,18 @@ fun DayScreen() {
 
     val categories by vm.categories.collectAsState()
     val running by vm.running.collectAsState()
-    val today by vm.todayLogs.collectAsState()
-    val week by vm.weekLogs.collectAsState()
 
     var showAddCategory by remember { mutableStateOf(false) }
     var showAddManual by remember { mutableStateOf(false) }
+    var showCustomPeriod by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<ActivityLog?>(null) }
-    var view by remember { mutableStateOf(View.TODAY) }
+
+    var period by remember { mutableStateOf<PeriodChoice>(PeriodChoice.Today) }
+    var customDays by remember { mutableStateOf(14) }
+
+    val (from, to) = remember(period, customDays) { period.rangeMs(customDays) }
+    val logsFlow = remember(from, to) { vm.logsBetween(from, to) }
+    val displayLogs by logsFlow.collectAsState(initial = emptyList())
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_day)) }) }
@@ -89,7 +115,14 @@ fun DayScreen() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             running?.let { current ->
-                item { RunningCard(log = current, onStop = { vm.stopRunning() }) }
+                item {
+                    RunningCard(
+                        log = current,
+                        onStop = { vm.stopRunning() },
+                        onPause = { vm.pauseRunning() },
+                        onResume = { vm.resumeRunning() }
+                    )
+                }
             }
 
             item {
@@ -111,9 +144,7 @@ fun DayScreen() {
                                 AssistChip(
                                     onClick = { vm.startQuick(cat) },
                                     label = { Text(cat.name) },
-                                    leadingIcon = {
-                                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                                    },
+                                    leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
                                     colors = AssistChipDefaults.assistChipColors(
                                         labelColor = parseColor(cat.colorHex)
                                     )
@@ -134,21 +165,34 @@ fun DayScreen() {
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = view == View.TODAY,
-                        onClick = { view = View.TODAY },
-                        label = { Text(stringResource(R.string.day_today)) }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val choices = listOf(
+                        PeriodChoice.Today, PeriodChoice.Week,
+                        PeriodChoice.Month, PeriodChoice.TwoMonths,
+                        PeriodChoice.Custom
                     )
-                    FilterChip(
-                        selected = view == View.WEEK,
-                        onClick = { view = View.WEEK },
-                        label = { Text(stringResource(R.string.day_week)) }
-                    )
+                    choices.forEach { choice ->
+                        FilterChip(
+                            selected = period == choice,
+                            onClick = {
+                                period = choice
+                                if (choice == PeriodChoice.Custom) showCustomPeriod = true
+                            },
+                            label = {
+                                val label = if (choice == PeriodChoice.Custom && period == PeriodChoice.Custom)
+                                    stringResource(R.string.day_custom_n_days, customDays)
+                                else stringResource(choice.labelRes)
+                                Text(label)
+                            }
+                        )
+                    }
                 }
             }
 
-            val displayLogs = if (view == View.TODAY) today else week
             item {
                 SectionCard(title = stringResource(R.string.day_balance)) {
                     StatsBlock(logs = displayLogs, categories = categories)
@@ -185,6 +229,17 @@ fun DayScreen() {
             }
         )
     }
+    if (showCustomPeriod) {
+        CustomPeriodDialog(
+            initialDays = customDays,
+            onDismiss = { showCustomPeriod = false },
+            onConfirm = { d ->
+                customDays = d.coerceAtLeast(1)
+                period = PeriodChoice.Custom
+                showCustomPeriod = false
+            }
+        )
+    }
     pendingDelete?.let { log ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -201,8 +256,6 @@ fun DayScreen() {
     }
 }
 
-private enum class View { TODAY, WEEK }
-
 @Composable
 private fun EmptyHint(text: String) {
     Card(
@@ -218,27 +271,47 @@ private fun EmptyHint(text: String) {
 }
 
 @Composable
-private fun RunningCard(log: ActivityLog, onStop: () -> Unit) {
-    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(log.id) {
-        while (true) { delay(1000); nowMs = System.currentTimeMillis() }
+private fun RunningCard(
+    log: ActivityLog,
+    onStop: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit
+) {
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(log.id, log.pausedAt) {
+        while (true) {
+            delay(1000)
+            nowMs = System.currentTimeMillis()
+        }
     }
-    val elapsedSec = ((nowMs - log.startedAt) / 1000L).coerceAtLeast(0)
+    val elapsedSec = log.activeSeconds(nowMs)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.day_running), style = MaterialTheme.typography.labelMedium)
-                Text(log.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(Time.formatStopwatch(elapsedSec), style = MaterialTheme.typography.titleLarge)
-            }
-            IconButton(onClick = onStop) {
-                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.action_stop))
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (log.isPaused) stringResource(R.string.day_paused)
+                        else stringResource(R.string.day_running),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(log.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(Time.formatStopwatch(elapsedSec), style = MaterialTheme.typography.titleLarge)
+                }
+                if (log.isPaused) {
+                    IconButton(onClick = onResume) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.action_resume))
+                    }
+                } else {
+                    IconButton(onClick = onPause) {
+                        Icon(Icons.Filled.Pause, contentDescription = stringResource(R.string.action_pause))
+                    }
+                }
+                IconButton(onClick = onStop) {
+                    Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.action_stop))
+                }
             }
         }
     }
@@ -248,7 +321,7 @@ private fun RunningCard(log: ActivityLog, onStop: () -> Unit) {
 private fun StatsBlock(logs: List<ActivityLog>, categories: List<ActivityCategory>) {
     val now = System.currentTimeMillis()
     val byCategory = logs.groupBy { it.categoryId }
-        .mapValues { (_, list) -> list.sumOf { ((it.endedAt ?: now) - it.startedAt) / 1000L } }
+        .mapValues { (_, list) -> list.sumOf { it.activeSeconds(now) } }
     val totalSec = byCategory.values.sum()
 
     Column {
@@ -264,14 +337,18 @@ private fun StatsBlock(logs: List<ActivityLog>, categories: List<ActivityCategor
             val sec = byCategory[cat.id] ?: 0L
             if (sec > 0) CategorySlice(cat.name, parseColor(cat.colorHex), sec) else null
         }
-        if (slices.isEmpty()) {
+        val uncategorized = byCategory[null] ?: 0L
+        val allSlices = if (uncategorized > 0) {
+            slices + CategorySlice("Без категории", MaterialTheme.colorScheme.outline, uncategorized)
+        } else slices
+        if (allSlices.isEmpty()) {
             Text(
                 "Нет записей за выбранный период.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            CategoryStackBar(slices = slices)
+            CategoryStackBar(slices = allSlices)
         }
     }
 }
@@ -279,7 +356,16 @@ private fun StatsBlock(logs: List<ActivityLog>, categories: List<ActivityCategor
 @Composable
 private fun LogRow(log: ActivityLog, categories: List<ActivityCategory>, onDelete: () -> Unit) {
     val cat = categories.firstOrNull { it.id == log.categoryId }
-    val duration = log.endedAt?.let { (it - log.startedAt) / 1000L } ?: 0L
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(log.id, log.endedAt, log.pausedAt) {
+        if (log.isRunning) {
+            while (true) {
+                delay(1000)
+                nowMs = System.currentTimeMillis()
+            }
+        }
+    }
+    val durationSec = log.activeSeconds(nowMs)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -291,10 +377,14 @@ private fun LogRow(log: ActivityLog, categories: List<ActivityCategory>, onDelet
                 Spacer(Modifier.height(2.dp))
                 Text(
                     buildString {
+                        append(Time.formatDate(log.startedAt))
+                        append(" • ")
                         append(Time.formatTime(log.startedAt))
                         log.endedAt?.let { append(" – ${Time.formatTime(it)}") }
                         append(" • ")
-                        append(Time.formatDuration(duration))
+                        append(Time.formatDuration(durationSec))
+                        if (log.isPaused) append(" • на паузе")
+                        else if (log.isRunning) append(" • идёт")
                         cat?.let { append(" • ${it.name}") }
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -391,6 +481,45 @@ private fun AddManualDialog(
                     onAdd(selectedCat, title, started, now)
                 },
                 enabled = title.isNotBlank() && (durationMin.toIntOrNull() ?: 0) > 0
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun CustomPeriodDialog(
+    initialDays: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (days: Int) -> Unit
+) {
+    var days by remember { mutableStateOf(initialDays.toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.day_custom_period)) },
+        text = {
+            Column {
+                Text(
+                    "Покажем статистику за указанное количество последних дней.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = days,
+                    onValueChange = { days = it.filter { c -> c.isDigit() }.take(5) },
+                    label = { Text("Количество дней") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(days.toIntOrNull() ?: initialDays) },
+                enabled = (days.toIntOrNull() ?: 0) > 0
             ) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {

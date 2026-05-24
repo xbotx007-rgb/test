@@ -54,16 +54,22 @@ import com.progressvision.app.ui.common.StatTile
 import com.progressvision.app.util.Time
 import com.progressvision.app.viewmodel.AppViewModelFactory
 import com.progressvision.app.viewmodel.SportViewModel
-import kotlinx.coroutines.flow.collect
 
-private enum class Range(val days: Int, val labelRes: Int) {
-    D7(7, R.string.sport_progress_7d),
-    D30(30, R.string.sport_progress_30d),
-    D90(90, R.string.sport_progress_90d),
-    ALL(36500, R.string.sport_progress_all)
+private sealed class Range(val days: Int, val labelRes: Int) {
+    object D7 : Range(7, R.string.sport_progress_7d)
+    object D14 : Range(14, R.string.sport_progress_14d)
+    object D21 : Range(21, R.string.sport_progress_21d)
+    object D30 : Range(30, R.string.sport_progress_30d)
+    object D365 : Range(365, R.string.sport_progress_365d)
+    object All : Range(36500, R.string.sport_progress_all)
+    data class Custom(val customDays: Int) : Range(customDays, R.string.sport_progress_custom)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val RangePresets: List<Range> = listOf(
+    Range.D7, Range.D14, Range.D21, Range.D30, Range.D365, Range.All
+)
+
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun SportDetailScreen(trackerId: Long, onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -74,7 +80,9 @@ fun SportDetailScreen(trackerId: Long, onBack: () -> Unit) {
     LaunchedEffect(trackerId) { tracker = vm.getTracker(trackerId) }
     val current = tracker ?: return
 
-    var range by remember { mutableStateOf(Range.D30) }
+    var range by remember { mutableStateOf<Range>(Range.D30) }
+    var customDays by remember { mutableStateOf(60) }
+    var showCustomPeriod by remember { mutableStateOf(false) }
     val since = remember(range) { Time.daysAgo(range.days) }
     val rangeEntries by vm.entriesSince(trackerId, since).collectAsState(initial = emptyList())
     val allEntries by vm.entries(trackerId).collectAsState(initial = emptyList())
@@ -107,14 +115,36 @@ fun SportDetailScreen(trackerId: Long, onBack: () -> Unit) {
             item {
                 SectionCard(title = "Прогресс") {
                     Column {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Range.values().forEach { r ->
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            RangePresets.forEach { r ->
                                 FilterChip(
-                                    selected = r == range,
+                                    selected = range == r,
                                     onClick = { range = r },
                                     label = { Text(stringResource(r.labelRes)) }
                                 )
                             }
+                            val isCustom = range is Range.Custom
+                            FilterChip(
+                                selected = isCustom,
+                                onClick = {
+                                    if (isCustom) showCustomPeriod = true
+                                    else {
+                                        range = Range.Custom(customDays)
+                                        showCustomPeriod = true
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        if (isCustom)
+                                            stringResource(R.string.sport_progress_custom_n, customDays)
+                                        else stringResource(R.string.sport_progress_custom)
+                                    )
+                                }
+                            )
                         }
                         Spacer(Modifier.height(12.dp))
                         val points = rangeEntries
@@ -158,9 +188,22 @@ fun SportDetailScreen(trackerId: Long, onBack: () -> Unit) {
         AddEntryDialog(
             type = current.type,
             onDismiss = { showAdd = false },
-            onSave = { e ->
-                vm.addEntry(e.copy(trackerId = trackerId), current.name)
+            onSave = { entries ->
+                entries.forEach { e ->
+                    vm.addEntry(e.copy(trackerId = trackerId), current.name)
+                }
                 showAdd = false
+            }
+        )
+    }
+    if (showCustomPeriod) {
+        CustomPeriodDialog(
+            initialDays = customDays,
+            onDismiss = { showCustomPeriod = false },
+            onConfirm = { d ->
+                customDays = d.coerceAtLeast(1)
+                range = Range.Custom(customDays)
+                showCustomPeriod = false
             }
         )
     }
@@ -250,15 +293,15 @@ private fun describeEntry(entry: SportEntry, type: SportType): String = when (ty
     }
 }
 
+private data class SetRow(val reps: String = "", val weight: String = "")
+
 @Composable
 private fun AddEntryDialog(
     type: SportType,
     onDismiss: () -> Unit,
-    onSave: (SportEntry) -> Unit
+    onSave: (List<SportEntry>) -> Unit
 ) {
-    var sets by remember { mutableStateOf("") }
-    var reps by remember { mutableStateOf("") }
-    var weight by remember { mutableStateOf("") }
+    var rows by remember { mutableStateOf(listOf(SetRow())) }
     var distance by remember { mutableStateOf("") }
     var duration by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -267,50 +310,68 @@ private fun AddEntryDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.sport_add_entry)) },
         text = {
-            Column {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 when (type) {
-                    SportType.STRENGTH -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = sets,
-                                onValueChange = { sets = it.filter { c -> c.isDigit() } },
-                                label = { Text(stringResource(R.string.sport_sets)) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = reps,
-                                onValueChange = { reps = it.filter { c -> c.isDigit() } },
-                                label = { Text(stringResource(R.string.sport_reps)) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
+                    SportType.STRENGTH, SportType.BODYWEIGHT -> {
+                        rows.forEachIndexed { index, row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "#${index + 1}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = row.reps,
+                                    onValueChange = { v ->
+                                        rows = rows.toMutableList().also {
+                                            it[index] = row.copy(reps = v.filter { c -> c.isDigit() })
+                                        }
+                                    },
+                                    label = { Text(stringResource(R.string.sport_reps)) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                if (type == SportType.STRENGTH) {
+                                    OutlinedTextField(
+                                        value = row.weight,
+                                        onValueChange = { v ->
+                                            rows = rows.toMutableList().also {
+                                                it[index] = row.copy(
+                                                    weight = v.filter { c -> c.isDigit() || c == '.' || c == ',' }
+                                                )
+                                            }
+                                        },
+                                        label = { Text(stringResource(R.string.sport_weight)) },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                }
+                                if (rows.size > 1) {
+                                    IconButton(onClick = {
+                                        rows = rows.toMutableList().also { it.removeAt(index) }
+                                    }) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = weight,
-                            onValueChange = { weight = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
-                            label = { Text(stringResource(R.string.sport_weight)) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    SportType.BODYWEIGHT -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = sets,
-                                onValueChange = { sets = it.filter { c -> c.isDigit() } },
-                                label = { Text(stringResource(R.string.sport_sets)) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = reps,
-                                onValueChange = { reps = it.filter { c -> c.isDigit() } },
-                                label = { Text(stringResource(R.string.sport_reps)) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(onClick = {
+                            val last = rows.lastOrNull() ?: SetRow()
+                            // Convenience: pre-fill new row with previous reps/weight
+                            rows = rows + SetRow(reps = last.reps, weight = last.weight)
+                        }) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.sport_add_set))
                         }
                     }
                     SportType.CARDIO -> {
@@ -342,18 +403,82 @@ private fun AddEntryDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val entry = SportEntry(
-                    trackerId = 0,
-                    date = System.currentTimeMillis(),
-                    sets = sets.toIntOrNull(),
-                    reps = reps.toIntOrNull(),
-                    weightKg = weight.replace(',', '.').toFloatOrNull(),
-                    distanceKm = distance.replace(',', '.').toFloatOrNull(),
-                    durationSec = duration.toIntOrNull()?.let { it * 60 },
-                    note = note.ifBlank { null }
-                )
-                onSave(entry)
+                val baseDate = System.currentTimeMillis()
+                val noteVal = note.ifBlank { null }
+                val entries: List<SportEntry> = when (type) {
+                    SportType.STRENGTH, SportType.BODYWEIGHT -> {
+                        rows.mapIndexedNotNull { index, row ->
+                            val reps = row.reps.toIntOrNull() ?: return@mapIndexedNotNull null
+                            if (reps <= 0) return@mapIndexedNotNull null
+                            SportEntry(
+                                trackerId = 0,
+                                // offset by ms per row so ordering by date is stable
+                                date = baseDate + index,
+                                sets = 1,
+                                reps = reps,
+                                weightKg = if (type == SportType.STRENGTH)
+                                    row.weight.replace(',', '.').toFloatOrNull()
+                                else null,
+                                note = if (index == 0) noteVal else null
+                            )
+                        }
+                    }
+                    SportType.CARDIO -> {
+                        val d = distance.replace(',', '.').toFloatOrNull()
+                        val durSec = duration.toIntOrNull()?.let { it * 60 }
+                        if (d == null && durSec == null) emptyList()
+                        else listOf(
+                            SportEntry(
+                                trackerId = 0,
+                                date = baseDate,
+                                distanceKm = d,
+                                durationSec = durSec,
+                                note = noteVal
+                            )
+                        )
+                    }
+                }
+                if (entries.isNotEmpty()) onSave(entries)
             }) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun CustomPeriodDialog(
+    initialDays: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (days: Int) -> Unit
+) {
+    var days by remember { mutableStateOf(initialDays.toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sport_progress_custom)) },
+        text = {
+            Column {
+                Text(
+                    "Покажем прогресс за указанное количество последних дней.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = days,
+                    onValueChange = { days = it.filter { c -> c.isDigit() }.take(5) },
+                    label = { Text("Количество дней") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(days.toIntOrNull() ?: initialDays) },
+                enabled = (days.toIntOrNull() ?: 0) > 0
+            ) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
