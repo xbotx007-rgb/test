@@ -52,7 +52,15 @@ class TaskViewModel(app: ProgressVisionApp) : AndroidViewModel(app) {
         viewModelScope.launch { repo.deleteSubTask(sub) }
     }
 
-    fun recordSubTaskTime(sub: SubTask, bigTaskTitle: String, startedAt: Long, endedAt: Long) {
-        viewModelScope.launch { repo.recordSubTaskTime(sub, bigTaskTitle, startedAt, endedAt) }
+    fun recordSubTaskTime(
+        sub: SubTask,
+        bigTaskTitle: String,
+        activeSec: Long,
+        startedAt: Long,
+        endedAt: Long
+    ) {
+        viewModelScope.launch {
+            repo.recordSubTaskTime(sub, bigTaskTitle, activeSec, startedAt, endedAt)
+        }
     }
 }

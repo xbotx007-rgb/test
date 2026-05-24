@@ -32,5 +32,19 @@ data class ActivityLog(
     val startedAt: Long,
     val endedAt: Long?,
     val note: String? = null,
-    val source: String = "manual" // manual | sport | task
-)
+    val source: String = "manual", // manual | sport | task
+    val pausedAt: Long? = null,
+    val pauseAccumulatedMs: Long = 0L
+) {
+    /** Effective active duration in seconds, excluding paused time. */
+    fun activeSeconds(nowMs: Long = System.currentTimeMillis()): Long {
+        val effectiveEnd = endedAt ?: nowMs
+        val pauseExtra = pausedAt?.let { (effectiveEnd - it).coerceAtLeast(0L) } ?: 0L
+        val totalPause = pauseAccumulatedMs + pauseExtra
+        val ms = (effectiveEnd - startedAt - totalPause).coerceAtLeast(0L)
+        return ms / 1000L
+    }
+
+    val isRunning: Boolean get() = endedAt == null
+    val isPaused: Boolean get() = endedAt == null && pausedAt != null
+}

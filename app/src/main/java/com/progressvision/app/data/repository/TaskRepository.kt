@@ -28,26 +28,32 @@ class TaskRepository(
         taskDao.updateSubTask(sub.copy(isDone = !sub.isDone))
 
     /**
-     * Record a timer session for a subtask. Adds [durationSec] to its time spent and
-     * mirrors the session as an ActivityLog under the "Проекты" category so day stats include it.
+     * Record a timer session for a subtask. Adds [activeSec] to its time spent and
+     * mirrors the session as an ActivityLog under the "Проекты" category. The activity
+     * log preserves wall-clock [startedAt] and [endedAt] but stores any paused interval
+     * via pauseAccumulatedMs so day-stats reflect only active time.
      */
     suspend fun recordSubTaskTime(
         sub: SubTask,
         bigTaskTitle: String,
+        activeSec: Long,
         startedAt: Long,
         endedAt: Long
     ) {
-        val durationSec = ((endedAt - startedAt) / 1000L).coerceAtLeast(0)
-        if (durationSec == 0L) return
-        taskDao.addTimeToSubTask(sub.id, durationSec)
+        if (activeSec <= 0L) return
+        taskDao.addTimeToSubTask(sub.id, activeSec)
         val cat = ensureCategory("Проекты")
+        val totalMs = (endedAt - startedAt).coerceAtLeast(0L)
+        val activeMs = activeSec * 1000L
+        val pausedMs = (totalMs - activeMs).coerceAtLeast(0L)
         dayDao.insertLog(
             ActivityLog(
                 categoryId = cat,
                 title = "$bigTaskTitle — ${sub.title}",
                 startedAt = startedAt,
                 endedAt = endedAt,
-                source = "task"
+                source = "task",
+                pauseAccumulatedMs = pausedMs
             )
         )
     }

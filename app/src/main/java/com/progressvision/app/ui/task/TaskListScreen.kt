@@ -15,12 +15,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -58,6 +60,7 @@ fun TaskListScreen(onOpen: (Long) -> Unit) {
     val tasks by vm.bigTasks.collectAsState()
 
     var showCreate by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<BigTask?>(null) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_task)) }) },
@@ -78,7 +81,12 @@ fun TaskListScreen(onOpen: (Long) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(tasks, key = { it.id }) { task ->
-                    BigTaskCard(task = task, vm = vm, onOpen = { onOpen(task.id) })
+                    BigTaskCard(
+                        task = task,
+                        vm = vm,
+                        onOpen = { onOpen(task.id) },
+                        onDelete = { pendingDelete = task }
+                    )
                 }
             }
         }
@@ -93,10 +101,25 @@ fun TaskListScreen(onOpen: (Long) -> Unit) {
             }
         )
     }
+    pendingDelete?.let { task ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(task.title) },
+            text = { Text("Удалить задачу вместе со всеми подзадачами?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteBigTask(task); pendingDelete = null
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
 }
 
 @Composable
-private fun BigTaskCard(task: BigTask, vm: TaskViewModel, onOpen: () -> Unit) {
+private fun BigTaskCard(task: BigTask, vm: TaskViewModel, onOpen: () -> Unit, onDelete: () -> Unit) {
     val subs by vm.subTasks(task.id).collectAsState(initial = emptyList())
     val percent = subs.progressPercent()
     Card(
@@ -124,6 +147,13 @@ private fun BigTaskCard(task: BigTask, vm: TaskViewModel, onOpen: () -> Unit) {
                     else "$done из ${subs.size} выполнено",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = stringResource(R.string.action_delete),
+                    tint = MaterialTheme.colorScheme.outline
                 )
             }
         }
